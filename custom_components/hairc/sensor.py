@@ -39,19 +39,35 @@ class IRCClient(irc.IRCClient):
         self._is_reconnecting = False
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
+    def makeConnection(self, transport):
+        """Make the connection and store the transport."""
+        _LOGGER.debug("Making connection with transport")
+        self.transport = transport
+        super().makeConnection(transport)
+
     def connectionMade(self):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
         if self._timeout_handle:
             self._timeout_handle.cancel()
             self._timeout_handle = None
-        self.transport = self.factory.transport
-        if self.transport is None:
+
+        if not self.transport:
             _LOGGER.error("Transport is None in connectionMade")
+            if self._connection_deferred and not self._connection_deferred.called:
+                self._connection_deferred.errback(
+                    error.ConnectionError("Transport is None")
+                )
             return
-        super().connectionMade()
-        if self._connection_deferred and not self._connection_deferred.called:
-            self._connection_deferred.callback(self)
+
+        try:
+            super().connectionMade()
+            if self._connection_deferred and not self._connection_deferred.called:
+                self._connection_deferred.callback(self)
+        except Exception as e:
+            _LOGGER.error("Error in connectionMade: %s", e)
+            if self._connection_deferred and not self._connection_deferred.called:
+                self._connection_deferred.errback(e)
 
     def signedOn(self):
         """Handle successful connection."""
@@ -80,7 +96,7 @@ class IRCClient(irc.IRCClient):
                 self._timeout_handle.cancel()
                 self._timeout_handle = None
             if (self._connection_deferred and 
-                not self._connection_deferred.called):
+                    not self._connection_deferred.called):
                 self._connection_deferred.errback(reason)
             if not self._stop_event.is_set() and not self._is_reconnecting:
                 # Schedule reconnect in the event loop
