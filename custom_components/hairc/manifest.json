@@ -1,9 +1,9 @@
 {
-    "domain": "uairc",
+    "domain": "hairc",
     "name": "IRC Home Assistant Integration",
-    "documentation": "https://github.com/sofagris/uairc",
+    "documentation": "https://github.com/yourusername/hairc",
     "dependencies": [],
-    "codeowners": ["@sofagris"],
+    "codeowners": ["@yourusername"],
     "requirements": ["pydle>=0.9.4"],
     "version": "0.1.0",
     "config_flow": true,

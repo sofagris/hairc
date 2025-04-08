@@ -1,6 +1,6 @@
 """Constants for the IRC Home Assistant Integration."""
 
-DOMAIN = "uairc"
+DOMAIN = "hairc"
 
 CONF_SERVER = "server"
 CONF_PORT = "port"
@@ -10,4 +10,4 @@ CONF_PASSWORD = "password"
 CONF_SSL = "ssl"
 
 DEFAULT_PORT = 6667
-DEFAULT_SSL = False
+DEFAULT_SSL = False 

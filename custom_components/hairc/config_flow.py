@@ -22,7 +22,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, str]:
     """Validate the user input."""
-    # Her kan vi legge til validering av IRC-tilkoblingen
+    # Here we can add validation of the IRC connection
     return {"title": f"IRC: {data['server']}"}
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

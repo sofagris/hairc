@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -22,6 +23,7 @@ class IRCBot(pydle.Client):
         self.hass = hass
         self.connected = False
         self.last_message = None
+
 
     async def on_connect(self):
         """Handle connection to IRC server."""
@@ -73,7 +75,7 @@ class IRCSensor(SensorEntity):
             config["channel"],
             self.hass
         )
-
+        
         try:
             await self._bot.connect(
                 config["server"],
@@ -92,6 +94,7 @@ class IRCSensor(SensorEntity):
         """Run when entity will be removed from hass."""
         if self._bot:
             await self._bot.disconnect()
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
