@@ -32,22 +32,26 @@ class IRCClient(irc.IRCClient):
         self.nickname = config["nick"]
         self.factory = None
         self.transport = None
+        _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
         """Called when a connection is made."""
+        _LOGGER.debug("Connection made to IRC server")
         self.transport = self.factory.transport
         super().connectionMade()
 
     def signedOn(self):
         """Handle successful connection."""
         try:
-            _LOGGER.info("Connected to IRC server")
+            _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
             self.hass.bus.fire(f"{DOMAIN}_connected")
             if self._reconnect_task:
                 self._reconnect_task.cancel()
                 self._reconnect_task = None
-            self.join(self._config["autojoins"][0])
+            channel = self._config["autojoins"][0]
+            _LOGGER.debug("Joining channel: %s", channel)
+            self.join(channel)
         except Exception as e:
             _LOGGER.error("Error in signedOn: %s", e)
 
@@ -69,10 +73,11 @@ class IRCClient(irc.IRCClient):
         """Attempt to reconnect to the IRC server."""
         retry_delay = 5  # Start with 5 seconds
         max_delay = 300  # Maximum 5 minutes between retries
-        
+
         while not self._stop_event.is_set():
             try:
-                _LOGGER.info("Attempting to reconnect to IRC server")
+                _LOGGER.info("Attempting to reconnect to IRC server at %s:%s", 
+                           self._config["host"], self._config["port"])
                 self.factory = IRCClientFactory(self._config, self.hass)
                 reactor.connectTCP(
                     self._config["host"],
@@ -118,6 +123,7 @@ class IRCClient(irc.IRCClient):
             self._reconnect_task.cancel()
         try:
             if self.transport is not None:
+                _LOGGER.debug("Sending quit message to IRC server")
                 self.quit("Home Assistant shutting down")
         except Exception as e:
             _LOGGER.error("Error during shutdown: %s", e)
@@ -132,9 +138,11 @@ class IRCClientFactory(protocol.ClientFactory):
         self.hass = hass
         self.protocol = IRCClient
         self.transport = None
+        _LOGGER.debug("IRC client factory initialized with config: %s", config)
 
     def buildProtocol(self, addr):
         """Create an instance of the protocol."""
+        _LOGGER.debug("Building protocol for address: %s", addr)
         p = self.protocol(self.config, self.hass)
         p.factory = self
         return p
@@ -165,6 +173,7 @@ async def async_setup_entry(
             "ssl": entry.data.get("ssl", False),
             "password": entry.data.get("password"),
         }
+        _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
         factory = IRCClientFactory(config, hass)
         client = factory.buildProtocol(None)
@@ -172,6 +181,7 @@ async def async_setup_entry(
         async_add_entities([sensor])
 
         # Start the IRC client in the background
+        _LOGGER.info("Connecting to IRC server at %s:%s", config["host"], config["port"])
         reactor.connectTCP(
             config["host"],
             config["port"],
@@ -198,6 +208,7 @@ class IRCSensor(SensorEntity):
         self._name = name
         self._state = "disconnected"
         self._messages = []
+        _LOGGER.debug("IRC sensor initialized with name: %s", name)
 
     @property
     def name(self) -> str:
