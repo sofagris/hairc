@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4] - 2025-04-08
+
+### Fixed
+- Fixed shutdown error when transport is None
+- Improved connection state management
+- Added proper transport handling in IRC client
+
 ## [0.1.3] - 2025-04-08
 
 ### Changed

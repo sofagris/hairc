@@ -1,5 +1,12 @@
 # Release Notes
 
+## Version 0.1.4 (2025-04-08)
+
+### Bug Fixes
+- Fixed shutdown error when transport is None
+- Improved connection state management
+- Added proper transport handling in IRC client
+
 ## Version 0.1.3 (2025-04-08)
 
 ### Breaking Changes

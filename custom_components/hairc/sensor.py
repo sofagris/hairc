@@ -31,6 +31,12 @@ class IRCClient(irc.IRCClient):
         self._config = config
         self.nickname = config["nick"]
         self.factory = None
+        self.transport = None
+
+    def connectionMade(self):
+        """Called when a connection is made."""
+        self.transport = self.factory.transport
+        super().connectionMade()
 
     def signedOn(self):
         """Handle successful connection."""
@@ -50,6 +56,7 @@ class IRCClient(irc.IRCClient):
         try:
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
+            self.transport = None
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
             if not self._stop_event.is_set():
                 self._reconnect_task = self.hass.async_create_task(
@@ -110,7 +117,8 @@ class IRCClient(irc.IRCClient):
         if self._reconnect_task:
             self._reconnect_task.cancel()
         try:
-            self.quit("Home Assistant shutting down")
+            if self.transport is not None:
+                self.quit("Home Assistant shutting down")
         except Exception as e:
             _LOGGER.error("Error during shutdown: %s", e)
 
@@ -123,6 +131,7 @@ class IRCClientFactory(protocol.ClientFactory):
         self.config = config
         self.hass = hass
         self.protocol = IRCClient
+        self.transport = None
 
     def buildProtocol(self, addr):
         """Create an instance of the protocol."""
