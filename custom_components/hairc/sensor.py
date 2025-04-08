@@ -7,7 +7,7 @@ from typing import Any
 import threading
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, defer
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -33,6 +33,7 @@ class IRCClient(irc.IRCClient):
         self.nickname = config["nick"]
         self.factory = None
         self.transport = None
+        self._connection_deferred = None
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -43,6 +44,8 @@ class IRCClient(irc.IRCClient):
             _LOGGER.error("Transport is None in connectionMade")
             return
         super().connectionMade()
+        if self._connection_deferred:
+            self._connection_deferred.callback(self)
 
     def signedOn(self):
         """Handle successful connection."""
@@ -66,6 +69,9 @@ class IRCClient(irc.IRCClient):
             self.connected = False
             self.transport = None
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
+            if self._connection_deferred:
+                self._connection_deferred.errback(reason)
+                self._connection_deferred = None
             if not self._stop_event.is_set():
                 # Schedule reconnect in the event loop
                 self.hass.loop.call_soon_threadsafe(
@@ -87,6 +93,8 @@ class IRCClient(irc.IRCClient):
                     self._config["host"], self._config["port"]
                 )
                 self.factory = IRCClientFactory(self._config, self.hass)
+                # Create a new deferred for this connection attempt
+                self._connection_deferred = defer.Deferred()
                 # Schedule the connection in the reactor thread
                 reactor.callFromThread(
                     reactor.connectTCP,
@@ -94,7 +102,17 @@ class IRCClient(irc.IRCClient):
                     self._config["port"],
                     self.factory
                 )
-                break
+                # Wait for the connection to complete or fail
+                try:
+                    await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: self._connection_deferred.result
+                    )
+                    break
+                except Exception as e:
+                    _LOGGER.error("Connection attempt failed: %s", e)
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, max_delay)
             except Exception as e:
                 _LOGGER.error("Reconnection attempt failed: %s", e)
                 await asyncio.sleep(retry_delay)
