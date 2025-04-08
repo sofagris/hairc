@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC Configuration",
+                "description": "Configure the connection to the IRC server",
+                "data": {
+                    "server": "IRC Server",
+                    "port": "Port",
+                    "nickname": "Username",
+                    "channel": "Channel",
+                    "password": "Password",
+                    "ssl": "Use SSL"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to the IRC server",
+            "invalid_auth": "Invalid authentication",
+            "unknown": "Unknown error"
+        },
+        "abort": {
+            "already_configured": "This IRC server is already configured"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRC Options",
+                "description": "Modify IRC configuration",
+                "data": {
+                    "server": "IRC Server",
+                    "port": "Port",
+                    "nickname": "Username",
+                    "channel": "Channel",
+                    "password": "Password",
+                    "ssl": "Use SSL"
+                }
+            }
+        }
+    }
+} 

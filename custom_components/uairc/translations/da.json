@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC-konfiguration",
+                "description": "Konfigurer forbindelsen til IRC-serveren",
+                "data": {
+                    "server": "IRC-server",
+                    "port": "Port",
+                    "nickname": "Brugernavn",
+                    "channel": "Kanal",
+                    "password": "Adgangskode",
+                    "ssl": "Brug SSL"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Kunne ikke forbinde til IRC-serveren",
+            "invalid_auth": "Ugyldig godkendelse",
+            "unknown": "Ukendt fejl"
+        },
+        "abort": {
+            "already_configured": "Denne IRC-server er allerede konfigureret"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRC-indstillinger",
+                "description": "Ændre IRC-konfigurationen",
+                "data": {
+                    "server": "IRC-server",
+                    "port": "Port",
+                    "nickname": "Brugernavn",
+                    "channel": "Kanal",
+                    "password": "Adgangskode",
+                    "ssl": "Brug SSL"
+                }
+            }
+        }
+    }
+} 

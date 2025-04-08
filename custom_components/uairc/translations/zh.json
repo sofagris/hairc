@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC 配置",
+                "description": "配置 IRC 服务器连接",
+                "data": {
+                    "server": "IRC 服务器",
+                    "port": "端口",
+                    "nickname": "用户名",
+                    "channel": "频道",
+                    "password": "密码",
+                    "ssl": "使用 SSL"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "无法连接到 IRC 服务器",
+            "invalid_auth": "认证无效",
+            "unknown": "未知错误"
+        },
+        "abort": {
+            "already_configured": "此 IRC 服务器已配置"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRC 选项",
+                "description": "修改 IRC 配置",
+                "data": {
+                    "server": "IRC 服务器",
+                    "port": "端口",
+                    "nickname": "用户名",
+                    "channel": "频道",
+                    "password": "密码",
+                    "ssl": "使用 SSL"
+                }
+            }
+        }
+    }
+} 

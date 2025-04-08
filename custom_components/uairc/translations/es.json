@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configuración IRC",
+                "description": "Configurar la conexión al servidor IRC",
+                "data": {
+                    "server": "Servidor IRC",
+                    "port": "Puerto",
+                    "nickname": "Nombre de usuario",
+                    "channel": "Canal",
+                    "password": "Contraseña",
+                    "ssl": "Usar SSL"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "No se pudo conectar al servidor IRC",
+            "invalid_auth": "Autenticación inválida",
+            "unknown": "Error desconocido"
+        },
+        "abort": {
+            "already_configured": "Este servidor IRC ya está configurado"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opciones IRC",
+                "description": "Modificar configuración IRC",
+                "data": {
+                    "server": "Servidor IRC",
+                    "port": "Puerto",
+                    "nickname": "Nombre de usuario",
+                    "channel": "Canal",
+                    "password": "Contraseña",
+                    "ssl": "Usar SSL"
+                }
+            }
+        }
+    }
+} 

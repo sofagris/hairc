@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC-konfiguration",
+                "description": "Konfigurera anslutningen till IRC-servern",
+                "data": {
+                    "server": "IRC-server",
+                    "port": "Port",
+                    "nickname": "Användarnamn",
+                    "channel": "Kanal",
+                    "password": "Lösenord",
+                    "ssl": "Använd SSL"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Kunde inte ansluta till IRC-servern",
+            "invalid_auth": "Ogiltig autentisering",
+            "unknown": "Okänt fel"
+        },
+        "abort": {
+            "already_configured": "Denna IRC-server är redan konfigurerad"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRC-alternativ",
+                "description": "Ändra IRC-konfigurationen",
+                "data": {
+                    "server": "IRC-server",
+                    "port": "Port",
+                    "nickname": "Användarnamn",
+                    "channel": "Kanal",
+                    "password": "Lösenord",
+                    "ssl": "Använd SSL"
+                }
+            }
+        }
+    }
+} 

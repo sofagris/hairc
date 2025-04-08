@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC-määritys",
+                "description": "Määritä yhteys IRC-palvelimeen",
+                "data": {
+                    "server": "IRC-palvelin",
+                    "port": "Portti",
+                    "nickname": "Käyttäjätunnus",
+                    "channel": "Kanava",
+                    "password": "Salasana",
+                    "ssl": "Käytä SSL:ää"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Yhteyden muodostaminen IRC-palvelimeen epäonnistui",
+            "invalid_auth": "Virheellinen tunnistautuminen",
+            "unknown": "Tuntematon virhe"
+        },
+        "abort": {
+            "already_configured": "Tämä IRC-palvelin on jo määritetty"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRC-asetukset",
+                "description": "Muokkaa IRC-määrityksiä",
+                "data": {
+                    "server": "IRC-palvelin",
+                    "port": "Portti",
+                    "nickname": "Käyttäjätunnus",
+                    "channel": "Kanava",
+                    "password": "Salasana",
+                    "ssl": "Käytä SSL:ää"
+                }
+            }
+        }
+    }
+} 

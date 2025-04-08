@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "IRC設定",
+                "description": "IRCサーバーへの接続を設定",
+                "data": {
+                    "server": "IRCサーバー",
+                    "port": "ポート",
+                    "nickname": "ユーザー名",
+                    "channel": "チャンネル",
+                    "password": "パスワード",
+                    "ssl": "SSLを使用"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "IRCサーバーに接続できませんでした",
+            "invalid_auth": "認証が無効です",
+            "unknown": "不明なエラー"
+        },
+        "abort": {
+            "already_configured": "このIRCサーバーは既に設定されています"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "IRCオプション",
+                "description": "IRC設定を変更",
+                "data": {
+                    "server": "IRCサーバー",
+                    "port": "ポート",
+                    "nickname": "ユーザー名",
+                    "channel": "チャンネル",
+                    "password": "パスワード",
+                    "ssl": "SSLを使用"
+                }
+            }
+        }
+    }
+} 
