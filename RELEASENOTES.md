@@ -1,12 +1,20 @@
 # Release Notes
 
-## Version 0.1.1 (2024-01-02)
+## Version 0.1.2 (2024-01-03)
 
-### Breaking Changes
-- Switched from pydle to irc3 library
-  - Reason: Python 3.13 compatibility issues with pydle
-  - Impact: Requires reinstallation of the integration
-  - Migration: Remove old integration and install new version
+### Stability Improvements
+- Added comprehensive error handling
+- Implemented automatic reconnection with exponential backoff
+- Limited message storage to prevent memory issues
+- Added proper cleanup on shutdown
+- Improved connection state management
+
+### Known Issues
+- Compatibility issue with Python 3.13:
+  - Error: `ImportError: cannot import name 'coroutine' from 'asyncio'`
+  - Cause: The `coroutine` decorator was removed from `asyncio` in Python 3.13
+  - Workaround: Use Python 3.12 or earlier until pydle library is updated
+  - Status: Investigating alternative solutions
 
 ### New Features
 - Initial release of the IRC Home Assistant Integration
@@ -43,15 +51,10 @@
 - Supports sensor and binary_sensor domains
 - Local push IoT class
 - Persistent directory support for user files
-- Uses irc3 library for IRC communication
-  - Better Python 3.13 compatibility
-  - Improved message handling
-  - Enhanced connection management
-
-### Known Issues
-- None reported in current release
+- Maximum of 100 stored messages
+- Automatic reconnection with 5-minute maximum retry interval
 
 ### Dependencies
-- irc3>=0.12.0
+- pydle>=0.9.4 (requires Python 3.12 or earlier)
 - Home Assistant Core 2024.1.0 or later
 - HACS (optional, for easy installation) 
