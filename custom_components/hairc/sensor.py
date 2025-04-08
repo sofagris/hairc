@@ -5,7 +5,6 @@ import logging
 import asyncio
 from typing import Any
 import threading
-from functools import partial
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
@@ -40,6 +39,9 @@ class IRCClient(irc.IRCClient):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
         self.transport = self.factory.transport
+        if self.transport is None:
+            _LOGGER.error("Transport is None in connectionMade")
+            return
         super().connectionMade()
 
     def signedOn(self):
@@ -212,6 +214,9 @@ async def async_setup_entry(
         # Start the reactor in a separate thread
         reactor_thread = threading.Thread(target=start_reactor, daemon=True)
         reactor_thread.start()
+
+        # Wait a moment for the reactor to start
+        await asyncio.sleep(1)
 
         # Connect to the IRC server
         reactor.callFromThread(
