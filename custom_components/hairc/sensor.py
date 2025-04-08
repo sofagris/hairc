@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import asyncio
 from typing import Any
+import threading
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
@@ -73,11 +74,13 @@ class IRCClient(irc.IRCClient):
         """Attempt to reconnect to the IRC server."""
         retry_delay = 5  # Start with 5 seconds
         max_delay = 300  # Maximum 5 minutes between retries
-
+        
         while not self._stop_event.is_set():
             try:
-                _LOGGER.info("Attempting to reconnect to IRC server at %s:%s", 
-                           self._config["host"], self._config["port"])
+                _LOGGER.info(
+                    "Attempting to reconnect to IRC server at %s:%s",
+                    self._config["host"], self._config["port"]
+                )
                 self.factory = IRCClientFactory(self._config, self.hass)
                 reactor.connectTCP(
                     self._config["host"],
@@ -181,8 +184,25 @@ async def async_setup_entry(
         async_add_entities([sensor])
 
         # Start the IRC client in the background
-        _LOGGER.info("Connecting to IRC server at %s:%s", config["host"], config["port"])
-        reactor.connectTCP(
+        _LOGGER.info(
+            "Connecting to IRC server at %s:%s",
+            config["host"], config["port"]
+        )
+
+        # Start the Twisted reactor in a separate thread
+        def start_reactor():
+            try:
+                reactor.run(installSignalHandlers=False)
+            except Exception as e:
+                _LOGGER.error("Error in Twisted reactor: %s", e)
+
+        # Start the reactor in a separate thread
+        reactor_thread = threading.Thread(target=start_reactor, daemon=True)
+        reactor_thread.start()
+
+        # Connect to the IRC server
+        reactor.callFromThread(
+            reactor.connectTCP,
             config["host"],
             config["port"],
             factory
@@ -191,6 +211,7 @@ async def async_setup_entry(
         # Register cleanup
         async def async_cleanup():
             await client.stop()
+            reactor.callFromThread(reactor.stop)
 
         entry.async_on_unload(async_cleanup)
 
