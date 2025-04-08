@@ -5,10 +5,9 @@ import logging
 import asyncio
 from typing import Any
 import threading
-from functools import partial
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor, defer
+from twisted.internet import protocol, reactor, defer, error
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -18,6 +17,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
+CONNECT_TIMEOUT = 30  # Connection timeout in seconds
 
 
 class IRCClient(irc.IRCClient):
@@ -35,17 +35,21 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self.transport = None
         self._connection_deferred = None
+        self._timeout_handle = None
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
+        if self._timeout_handle:
+            self._timeout_handle.cancel()
+            self._timeout_handle = None
         self.transport = self.factory.transport
         if self.transport is None:
             _LOGGER.error("Transport is None in connectionMade")
             return
         super().connectionMade()
-        if self._connection_deferred:
+        if self._connection_deferred and not self._connection_deferred.called:
             self._connection_deferred.callback(self)
 
     def signedOn(self):
@@ -70,9 +74,11 @@ class IRCClient(irc.IRCClient):
             self.connected = False
             self.transport = None
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
-            if self._connection_deferred:
+            if self._timeout_handle:
+                self._timeout_handle.cancel()
+                self._timeout_handle = None
+            if self._connection_deferred and not self._connection_deferred.called:
                 self._connection_deferred.errback(reason)
-                self._connection_deferred = None
             if not self._stop_event.is_set():
                 # Schedule reconnect in the event loop
                 self.hass.loop.call_soon_threadsafe(
@@ -94,48 +100,58 @@ class IRCClient(irc.IRCClient):
                     self._config["host"], self._config["port"]
                 )
                 self.factory = IRCClientFactory(self._config, self.hass)
-                # Create a new deferred for this connection attempt
+                
+                # Create a new future for this connection attempt
+                future = asyncio.Future()
+                
+                # Create a new deferred and set up callbacks
                 self._connection_deferred = defer.Deferred()
                 
-                # Add callbacks to the deferred
                 def on_connect(result):
                     _LOGGER.debug("Connection successful: %s", result)
+                    if not future.done():
+                        future.set_result(result)
                     return result
 
                 def on_error(failure):
                     _LOGGER.error("Connection failed: %s", failure)
+                    if not future.done():
+                        future.set_exception(failure.value)
                     return failure
 
                 self._connection_deferred.addCallbacks(on_connect, on_error)
+                
+                # Set up connection timeout
+                def on_timeout():
+                    if not future.done():
+                        _LOGGER.error("Connection timed out")
+                        future.set_exception(error.TimeoutError())
+                
+                self._timeout_handle = self.hass.loop.call_later(
+                    CONNECT_TIMEOUT, 
+                    lambda: self.hass.loop.call_soon_threadsafe(on_timeout)
+                )
                 
                 # Schedule the connection in the reactor thread
                 reactor.callFromThread(
                     reactor.connectTCP,
                     self._config["host"],
                     self._config["port"],
-                    self.factory
+                    self.factory,
+                    timeout=CONNECT_TIMEOUT
                 )
                 
-                # Wait for the connection to complete or fail
                 try:
-                    # Convert the Deferred to a Future
-                    future = asyncio.Future()
-                    
-                    def callback(result):
-                        if not future.done():
-                            future.set_result(result)
-                    
-                    def errback(failure):
-                        if not future.done():
-                            future.set_exception(failure.value)
-                    
-                    self._connection_deferred.addCallbacks(callback, errback)
-                    
-                    # Wait for the future to complete
                     await future
                     break
                 except Exception as e:
-                    _LOGGER.error("Connection attempt failed: %s", e)
+                    if isinstance(e, error.TimeoutError):
+                        _LOGGER.error("Connection timed out, retrying...")
+                    else:
+                        _LOGGER.error("Connection attempt failed: %s", e)
+                    if self._timeout_handle:
+                        self._timeout_handle.cancel()
+                        self._timeout_handle = None
                     await asyncio.sleep(retry_delay)
                     retry_delay = min(retry_delay * 2, max_delay)
             except Exception as e:
@@ -174,6 +190,8 @@ class IRCClient(irc.IRCClient):
         self._stop_event.set()
         if self._reconnect_task:
             self._reconnect_task.cancel()
+        if self._timeout_handle:
+            self._timeout_handle.cancel()
         try:
             if self.transport is not None:
                 _LOGGER.debug("Sending quit message to IRC server")
@@ -266,7 +284,8 @@ async def async_setup_entry(
             reactor.connectTCP,
             config["host"],
             config["port"],
-            factory
+            factory,
+            timeout=CONNECT_TIMEOUT
         )
 
         # Register cleanup
