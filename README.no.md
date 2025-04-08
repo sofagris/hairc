@@ -13,7 +13,23 @@ En Home Assistant-integrasjon som lar deg koble til IRC-servere og kanaler for �
 
 ## Installasjon
 
-1. Kopier mappen `custom_components/uairc` til din Home Assistant `custom_components`-mappe
+### HACS-installasjon (Anbefalt)
+
+1. Åpne HACS i din Home Assistant-instans
+2. Gå til "Integrasjoner"-seksjonen
+3. Klikk på de tre prikkene i øvre høyre hjørne
+4. Velg "Egendefinerte repositorier"
+5. Legg til dette repositoriet:
+   - Repository: `yourusername/hairc`
+   - Kategori: Integrasjon
+6. Klikk "Legg til"
+7. Finn "IRC Home Assistant Integration" i listen
+8. Klikk "Installer"
+9. Start om Home Assistant
+
+### Manuell installasjon
+
+1. Kopier mappen `custom_components/hairc` til din Home Assistant `custom_components`-mappe
 2. Start om Home Assistant
 3. Gå til Integrasjoner i Home Assistant GUI
 4. Klikk på "+ Legg til integrasjon"
@@ -32,7 +48,7 @@ En Home Assistant-integrasjon som lar deg koble til IRC-servere og kanaler for �
 
 ```yaml
 # configuration.yaml
-uairc:
+hairc:
   server: irc.example.com
   port: 6667
   nickname: homeassistant

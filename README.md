@@ -13,7 +13,23 @@ A Home Assistant integration that allows you to connect to IRC servers and chann
 
 ## Installation
 
-1. Copy the `custom_components/uairc` folder to your Home Assistant `custom_components` folder
+### HACS Installation (Recommended)
+
+1. Open HACS in your Home Assistant instance
+2. Go to the "Integrations" section
+3. Click on the three dots in the top right corner
+4. Select "Custom repositories"
+5. Add this repository:
+   - Repository: `yourusername/hairc`
+   - Category: Integration
+6. Click "Add"
+7. Find "IRC Home Assistant Integration" in the list
+8. Click "Install"
+9. Restart Home Assistant
+
+### Manual Installation
+
+1. Copy the `custom_components/hairc` folder to your Home Assistant `custom_components` folder
 2. Restart Home Assistant
 3. Go to Integrations in Home Assistant GUI
 4. Click on "+ Add Integration"
@@ -32,7 +48,7 @@ A Home Assistant integration that allows you to connect to IRC servers and chann
 
 ```yaml
 # configuration.yaml
-uairc:
+hairc:
   server: irc.example.com
   port: 6667
   nickname: homeassistant

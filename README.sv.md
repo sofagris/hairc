@@ -13,7 +13,23 @@ En Home Assistant-integration som låter dig ansluta till IRC-servrar och kanale
 
 ## Installation
 
-1. Kopiera mappen `custom_components/uairc` till din Home Assistant `custom_components`-mapp
+### HACS-installation (Rekommenderas)
+
+1. Öppna HACS i din Home Assistant-instans
+2. Gå till "Integrationer"-sektionen
+3. Klicka på de tre punkterna i övre högra hörnet
+4. Välj "Anpassade förråd"
+5. Lägg till detta förråd:
+   - Förråd: `yourusername/hairc`
+   - Kategori: Integration
+6. Klicka "Lägg till"
+7. Hitta "IRC Home Assistant Integration" i listan
+8. Klicka "Installera"
+9. Starta om Home Assistant
+
+### Manuell installation
+
+1. Kopiera mappen `custom_components/hairc` till din Home Assistant `custom_components`-mapp
 2. Starta om Home Assistant
 3. Gå till Integrationer i Home Assistant GUI
 4. Klicka på "+ Lägg till integration"
@@ -22,8 +38,8 @@ En Home Assistant-integration som låter dig ansluta till IRC-servrar och kanale
    - Server (IRC-servern du vill ansluta till)
    - Port (standard 6667)
    - Nickname (botens användarnamn)
-   - Channel (kanalen du vill ansluta till)
-   - Password (valfritt, om krävs av servern)
+   - Channel (kanalen du vill gå med i)
+   - Password (valfritt, om servern kräver det)
    - SSL (om du vill använda säker anslutning)
 
 ## Konfiguration
@@ -32,7 +48,7 @@ En Home Assistant-integration som låter dig ansluta till IRC-servrar och kanale
 
 ```yaml
 # configuration.yaml
-uairc:
+hairc:
   server: irc.example.com
   port: 6667
   nickname: homeassistant
@@ -47,8 +63,8 @@ Om du upplever anslutningsproblem:
 
 1. Kontrollera att serveradressen är korrekt
 2. Bekräfta att porten är korrekt
-3. Verifiera att smeknamnet är tillgängligt
-4. Kontrollera att kanalen existerar
+3. Verifiera att nicknamnet är tillgängligt
+4. Kontrollera om kanalen existerar
 5. Leta efter felmeddelanden i Home Assistant-loggen
 
 ## Bidra

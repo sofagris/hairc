@@ -13,7 +13,23 @@ En Home Assistant-integration, der giver dig mulighed for at forbinde til IRC-se
 
 ## Installation
 
-1. Kopier mappen `custom_components/uairc` til din Home Assistant `custom_components`-mappe
+### HACS-installation (Anbefalet)
+
+1. Åbn HACS i din Home Assistant-instans
+2. Gå til "Integrationer"-sektionen
+3. Klik på de tre prikker i øverste højre hjørne
+4. Vælg "Brugerdefinerede repositories"
+5. Tilføj dette repository:
+   - Repository: `yourusername/hairc`
+   - Kategori: Integration
+6. Klik "Tilføj"
+7. Find "IRC Home Assistant Integration" i listen
+8. Klik "Installer"
+9. Genstart Home Assistant
+
+### Manuel installation
+
+1. Kopier mappen `custom_components/hairc` til din Home Assistant `custom_components`-mappe
 2. Genstart Home Assistant
 3. Gå til Integrationer i Home Assistant GUI
 4. Klik på "+ Tilføj integration"
@@ -22,8 +38,8 @@ En Home Assistant-integration, der giver dig mulighed for at forbinde til IRC-se
    - Server (IRC-serveren du vil forbinde til)
    - Port (standard 6667)
    - Nickname (botens brugernavn)
-   - Channel (kanalen du vil forbinde til)
-   - Password (valgfrit, hvis krævet af serveren)
+   - Channel (kanalen du vil deltage i)
+   - Password (valgfrit, hvis serveren kræver det)
    - SSL (hvis du vil bruge sikker forbindelse)
 
 ## Konfiguration
@@ -32,7 +48,7 @@ En Home Assistant-integration, der giver dig mulighed for at forbinde til IRC-se
 
 ```yaml
 # configuration.yaml
-uairc:
+hairc:
   server: irc.example.com
   port: 6667
   nickname: homeassistant
@@ -47,8 +63,8 @@ Hvis du oplever forbindelsesproblemer:
 
 1. Kontroller at serveradressen er korrekt
 2. Bekræft at porten er korrekt
-3. Verificer at kaldenavnet er tilgængeligt
-4. Kontroller at kanalen eksisterer
+3. Verificer at nicknamet er tilgængeligt
+4. Tjek om kanalen eksisterer
 5. Kig efter fejlmeddelelser i Home Assistant-loggen
 
 ## Bidrag
