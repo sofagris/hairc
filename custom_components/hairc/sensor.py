@@ -5,7 +5,8 @@ import logging
 import asyncio
 from typing import Any
 
-import pydle
+from twisted.words.protocols import irc
+from twisted.internet import protocol, reactor
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -17,20 +18,21 @@ _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
 
 
-class IRCClient(pydle.Client):
-    """IRC client implementation using pydle."""
+class IRCClient(irc.IRCClient):
+    """IRC client implementation using Twisted."""
 
     def __init__(self, config: dict[str, Any], hass: HomeAssistant) -> None:
         """Initialize the IRC client."""
-        super().__init__(config["nick"])
         self.hass = hass
         self.messages = []
         self.connected = False
         self._reconnect_task = None
         self._stop_event = asyncio.Event()
         self._config = config
+        self.nickname = config["nick"]
+        self.factory = None
 
-    async def on_connect(self):
+    def signedOn(self):
         """Handle successful connection."""
         try:
             _LOGGER.info("Connected to IRC server")
@@ -39,14 +41,14 @@ class IRCClient(pydle.Client):
             if self._reconnect_task:
                 self._reconnect_task.cancel()
                 self._reconnect_task = None
-            await self.join(self._config["autojoins"][0])
+            self.join(self._config["autojoins"][0])
         except Exception as e:
-            _LOGGER.error("Error in on_connect: %s", e)
+            _LOGGER.error("Error in signedOn: %s", e)
 
-    async def on_disconnect(self, expected):
+    def connectionLost(self, reason):
         """Handle lost connection."""
         try:
-            _LOGGER.warning("Lost connection to IRC server")
+            _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
             if not self._stop_event.is_set():
@@ -54,7 +56,7 @@ class IRCClient(pydle.Client):
                     self._reconnect()
                 )
         except Exception as e:
-            _LOGGER.error("Error in on_disconnect: %s", e)
+            _LOGGER.error("Error in connectionLost: %s", e)
 
     async def _reconnect(self):
         """Attempt to reconnect to the IRC server."""
@@ -64,11 +66,11 @@ class IRCClient(pydle.Client):
         while not self._stop_event.is_set():
             try:
                 _LOGGER.info("Attempting to reconnect to IRC server")
-                await self.connect(
+                self.factory = IRCClientFactory(self._config, self.hass)
+                reactor.connectTCP(
                     self._config["host"],
                     self._config["port"],
-                    password=self._config.get("password"),
-                    tls=self._config.get("ssl", False)
+                    self.factory
                 )
                 break
             except Exception as e:
@@ -76,22 +78,22 @@ class IRCClient(pydle.Client):
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, max_delay)
 
-    async def on_message(self, target, source, message):
+    def privmsg(self, user, channel, message):
         """Handle incoming messages."""
         try:
-            if target == self.nickname:
-                msg = f"Private message from {source}: {message}"
+            if channel == self.nickname:
+                msg = f"Private message from {user}: {message}"
                 self._add_message(msg)
                 self.hass.bus.fire(
                     f"{DOMAIN}_message",
-                    {"message": message, "sender": source}
+                    {"message": message, "sender": user}
                 )
             else:
-                msg = f"Public message in {target} from {source}: {message}"
+                msg = f"Public message in {channel} from {user}: {message}"
                 self._add_message(msg)
                 self.hass.bus.fire(
                     f"{DOMAIN}_message",
-                    {"message": message, "sender": source, "channel": target}
+                    {"message": message, "sender": user, "channel": channel}
                 )
         except Exception as e:
             _LOGGER.error("Error handling message: %s", e)
@@ -108,9 +110,35 @@ class IRCClient(pydle.Client):
         if self._reconnect_task:
             self._reconnect_task.cancel()
         try:
-            await self.disconnect()
+            self.quit("Home Assistant shutting down")
         except Exception as e:
             _LOGGER.error("Error during shutdown: %s", e)
+
+
+class IRCClientFactory(protocol.ClientFactory):
+    """Factory for IRC clients."""
+
+    def __init__(self, config: dict[str, Any], hass: HomeAssistant) -> None:
+        """Initialize the factory."""
+        self.config = config
+        self.hass = hass
+        self.protocol = IRCClient
+
+    def buildProtocol(self, addr):
+        """Create an instance of the protocol."""
+        p = self.protocol(self.config, self.hass)
+        p.factory = self
+        return p
+
+    def clientConnectionLost(self, connector, reason):
+        """Handle lost connection."""
+        _LOGGER.warning("Connection lost: %s", reason)
+        connector.connect()
+
+    def clientConnectionFailed(self, connector, reason):
+        """Handle failed connection."""
+        _LOGGER.error("Connection failed: %s", reason)
+        connector.connect()
 
 
 async def async_setup_entry(
@@ -129,17 +157,17 @@ async def async_setup_entry(
             "password": entry.data.get("password"),
         }
 
-        client = IRCClient(config, hass)
+        factory = IRCClientFactory(config, hass)
+        client = factory.buildProtocol(None)
         sensor = IRCSensor(client, entry.title)
         async_add_entities([sensor])
 
         # Start the IRC client in the background
-        hass.async_create_task(client.connect(
+        reactor.connectTCP(
             config["host"],
             config["port"],
-            password=config.get("password"),
-            tls=config.get("ssl", False)
-        ))
+            factory
+        )
 
         # Register cleanup
         async def async_cleanup():

@@ -1,6 +1,57 @@
 # Release Notes
 
-## Version 0.1.2 (2024-01-03)
+## Version 0.1.3 (2025-04-08)
+
+### Breaking Changes
+- Switched from pydle to Twisted as IRC library
+  - Reason: Better support for newer Python versions and more mature library
+  - Impact: Existing configurations will still work, but requires Home Assistant restart
+  - Migration: No migration needed, but recommended to remove and re-add the integration
+
+### New Features
+- Improved error handling and reconnection logic
+- Added support for both private and public messages
+- Added a maximum limit for stored messages (100 messages)
+
+### Technical Details
+- Using Twisted>=22.10.0 as IRC library
+- Full support for Python 3.13
+- Improved connection and message handling
+- More robust error handling
+
+### Dependencies
+- Twisted>=22.10.0
+
+## Version 0.1.2 (2025-04-08)
+
+### Changed
+- Updated documentation link to correct repository
+- Updated codeowners to correct username
+
+## Version 0.1.1 (2025-04-08) - Withdrawn
+
+### Critical Issues
+- Version was withdrawn due to Home Assistant crash
+- Issues with irc3 library and Python 3.13
+
+## Version 0.1.0 (2025-04-08)
+
+### New Features
+- Initial release of IRC Home Assistant Integration
+- Support for connecting to IRC servers
+- Support for SSL encryption
+- Support for server passwords
+- Support for incoming messages
+- GUI configuration
+
+### Technical Details
+- Using pydle>=0.9.4 as IRC library
+- Supports both private and public messages
+- Shows connection status in Home Assistant
+- Stores the last 10 messages
+
+### Dependencies
+- pydle>=0.9.4
 
 ### Stability Improvements
 - Added comprehensive error handling
@@ -15,14 +66,6 @@
   - Cause: The `coroutine` decorator was removed from `asyncio` in Python 3.13
   - Workaround: Use Python 3.12 or earlier until pydle library is updated
   - Status: Investigating alternative solutions
-
-### New Features
-- Initial release of the IRC Home Assistant Integration
-- Support for connecting to IRC servers and channels
-- SSL encryption support
-- Server password support
-- Incoming message logging
-- GUI configuration interface
 
 ### Installation Methods
 - Added HACS installation support

@@ -4,8 +4,8 @@
     "documentation": "https://github.com/sofagris/hairc",
     "dependencies": [],
     "codeowners": ["@sofagris"],
-    "requirements": ["pydle>=0.9.4"],
-    "version": "0.1.2",
+    "requirements": ["twisted>=22.10.0"],
+    "version": "0.1.3",
     "config_flow": true,
     "iot_class": "local_push"
 }
