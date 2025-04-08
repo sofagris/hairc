@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Any
 import threading
+from functools import partial
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor, defer
@@ -95,6 +96,18 @@ class IRCClient(irc.IRCClient):
                 self.factory = IRCClientFactory(self._config, self.hass)
                 # Create a new deferred for this connection attempt
                 self._connection_deferred = defer.Deferred()
+                
+                # Add callbacks to the deferred
+                def on_connect(result):
+                    _LOGGER.debug("Connection successful: %s", result)
+                    return result
+
+                def on_error(failure):
+                    _LOGGER.error("Connection failed: %s", failure)
+                    return failure
+
+                self._connection_deferred.addCallbacks(on_connect, on_error)
+                
                 # Schedule the connection in the reactor thread
                 reactor.callFromThread(
                     reactor.connectTCP,
@@ -102,12 +115,24 @@ class IRCClient(irc.IRCClient):
                     self._config["port"],
                     self.factory
                 )
+                
                 # Wait for the connection to complete or fail
                 try:
-                    await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: self._connection_deferred.result
-                    )
+                    # Convert the Deferred to a Future
+                    future = asyncio.Future()
+                    
+                    def callback(result):
+                        if not future.done():
+                            future.set_result(result)
+                    
+                    def errback(failure):
+                        if not future.done():
+                            future.set_exception(failure.value)
+                    
+                    self._connection_deferred.addCallbacks(callback, errback)
+                    
+                    # Wait for the future to complete
+                    await future
                     break
                 except Exception as e:
                     _LOGGER.error("Connection attempt failed: %s", e)
