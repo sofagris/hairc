@@ -36,6 +36,7 @@ class IRCClient(irc.IRCClient):
         self.transport = None
         self._connection_deferred = None
         self._timeout_handle = None
+        self._is_reconnecting = False
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -57,6 +58,7 @@ class IRCClient(irc.IRCClient):
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
+            self._is_reconnecting = False
             self.hass.bus.fire(f"{DOMAIN}_connected")
             if self._reconnect_task:
                 self._reconnect_task.cancel()
@@ -77,9 +79,10 @@ class IRCClient(irc.IRCClient):
             if self._timeout_handle:
                 self._timeout_handle.cancel()
                 self._timeout_handle = None
-            if self._connection_deferred and not self._connection_deferred.called:
+            if (self._connection_deferred and 
+                not self._connection_deferred.called):
                 self._connection_deferred.errback(reason)
-            if not self._stop_event.is_set():
+            if not self._stop_event.is_set() and not self._is_reconnecting:
                 # Schedule reconnect in the event loop
                 self.hass.loop.call_soon_threadsafe(
                     self.hass.async_create_task,
@@ -90,6 +93,10 @@ class IRCClient(irc.IRCClient):
 
     async def _reconnect(self):
         """Attempt to reconnect to the IRC server."""
+        if self._is_reconnecting:
+            return
+        
+        self._is_reconnecting = True
         retry_delay = 5  # Start with 5 seconds
         max_delay = 300  # Maximum 5 minutes between retries
         
@@ -158,6 +165,8 @@ class IRCClient(irc.IRCClient):
                 _LOGGER.error("Reconnection attempt failed: %s", e)
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, max_delay)
+        
+        self._is_reconnecting = False
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
@@ -221,20 +230,14 @@ class IRCClientFactory(protocol.ClientFactory):
     def clientConnectionLost(self, connector, reason):
         """Handle lost connection."""
         _LOGGER.warning("Connection lost: %s", reason)
-        # Schedule reconnect in the event loop
-        self.hass.loop.call_soon_threadsafe(
-            self.hass.async_create_task,
-            self.protocol(self.config, self.hass)._reconnect()
-        )
+        # Let the protocol handle reconnection
+        pass
 
     def clientConnectionFailed(self, connector, reason):
         """Handle failed connection."""
         _LOGGER.error("Connection failed: %s", reason)
-        # Schedule reconnect in the event loop
-        self.hass.loop.call_soon_threadsafe(
-            self.hass.async_create_task,
-            self.protocol(self.config, self.hass)._reconnect()
-        )
+        # Let the protocol handle reconnection
+        pass
 
 
 async def async_setup_entry(
