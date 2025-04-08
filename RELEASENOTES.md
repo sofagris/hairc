@@ -1,13 +1,23 @@
 # Release Notes
 
-## Version 0.1.4 (2025-04-08)
+## Version 0.1.5 (2025-04-08)
 
 ### Bug Fixes
 - Fixed shutdown error when transport is None
 - Improved connection state management
 - Added proper transport handling in IRC client
+- Added service_identity dependency for proper SSL/TLS support
 
-## Version 0.1.3 (2025-04-08)
+### Technical Details
+- Added service_identity>=23.1.0 for proper SSL/TLS certificate verification
+- Improved SSL/TLS security with proper hostname verification
+- Full support for secure IRC connections
+
+### Dependencies
+- Twisted>=22.10.0
+- service_identity>=23.1.0
+
+## Version 0.1.4 (2025-04-08)
 
 ### Breaking Changes
 - Switched from pydle to Twisted as IRC library
@@ -29,19 +39,19 @@
 ### Dependencies
 - Twisted>=22.10.0
 
-## Version 0.1.2 (2025-04-08)
+## Version 0.1.3 (2025-04-08)
 
 ### Changed
 - Updated documentation link to correct repository
 - Updated codeowners to correct username
 
-## Version 0.1.1 (2025-04-08) - Withdrawn
+## Version 0.1.2 (2025-04-08) - Withdrawn
 
 ### Critical Issues
 - Version was withdrawn due to Home Assistant crash
 - Issues with irc3 library and Python 3.13
 
-## Version 0.1.0 (2025-04-08)
+## Version 0.1.1 (2025-04-08)
 
 ### New Features
 - Initial release of IRC Home Assistant Integration

@@ -1,13 +1,14 @@
 # Changelog
 
-## [0.1.4] - 2025-04-08
+## [0.1.5] - 2025-04-08
 
 ### Fixed
 - Fixed shutdown error when transport is None
 - Improved connection state management
 - Added proper transport handling in IRC client
+- Added service_identity dependency for proper SSL/TLS support
 
-## [0.1.3] - 2025-04-08
+## [0.1.4] - 2025-04-08
 
 ### Changed
 - Switched from pydle to Twisted as IRC library
@@ -15,13 +16,13 @@
 - Added support for both private and public messages
 - Added a maximum limit for stored messages
 
-## [0.1.2] - 2025-04-08
+## [0.1.3] - 2025-04-08
 
 ### Changed
 - Updated documentation link to correct repository
 - Updated codeowners to correct username
 
-## [0.1.1] - 2025-04-08 (Withdrawn)
+## [0.1.2] - 2025-04-08 (Withdrawn)
 
 ### Changed
 - Switched from pydle to irc3 as IRC library
@@ -32,7 +33,7 @@
 ### Critical Issues
 - Version was withdrawn due to Home Assistant crash
 
-## [0.1.0] - 2025-04-08
+## [0.1.1] - 2025-04-08
 
 ### Added
 - Initial release of IRC Home Assistant Integration

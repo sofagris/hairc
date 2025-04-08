@@ -4,8 +4,8 @@
     "documentation": "https://github.com/sofagris/hairc",
     "dependencies": [],
     "codeowners": ["@sofagris"],
-    "requirements": ["twisted>=22.10.0"],
-    "version": "0.1.4",
+    "requirements": ["twisted>=22.10.0", "service_identity>=23.1.0"],
+    "version": "0.1.5",
     "config_flow": true,
     "iot_class": "local_push"
 }
