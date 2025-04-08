@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Any
 import threading
+from functools import partial
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
@@ -64,7 +65,9 @@ class IRCClient(irc.IRCClient):
             self.transport = None
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
             if not self._stop_event.is_set():
-                self._reconnect_task = self.hass.async_create_task(
+                # Schedule reconnect in the event loop
+                self.hass.loop.call_soon_threadsafe(
+                    self.hass.async_create_task,
                     self._reconnect()
                 )
         except Exception as e:
@@ -82,7 +85,9 @@ class IRCClient(irc.IRCClient):
                     self._config["host"], self._config["port"]
                 )
                 self.factory = IRCClientFactory(self._config, self.hass)
-                reactor.connectTCP(
+                # Schedule the connection in the reactor thread
+                reactor.callFromThread(
+                    reactor.connectTCP,
                     self._config["host"],
                     self._config["port"],
                     self.factory
@@ -153,12 +158,20 @@ class IRCClientFactory(protocol.ClientFactory):
     def clientConnectionLost(self, connector, reason):
         """Handle lost connection."""
         _LOGGER.warning("Connection lost: %s", reason)
-        connector.connect()
+        # Schedule reconnect in the event loop
+        self.hass.loop.call_soon_threadsafe(
+            self.hass.async_create_task,
+            self.protocol(self.config, self.hass)._reconnect()
+        )
 
     def clientConnectionFailed(self, connector, reason):
         """Handle failed connection."""
         _LOGGER.error("Connection failed: %s", reason)
-        connector.connect()
+        # Schedule reconnect in the event loop
+        self.hass.loop.call_soon_threadsafe(
+            self.hass.async_create_task,
+            self.protocol(self.config, self.hass)._reconnect()
+        )
 
 
 async def async_setup_entry(
