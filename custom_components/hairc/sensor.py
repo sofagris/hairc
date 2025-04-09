@@ -249,10 +249,17 @@ async def async_setup_entry(
         # Register service
         async def async_handle_send_message(call: ServiceCall) -> None:
             """Handle the send_message service call."""
-            message = call.data.get("message")
-            channel = call.data.get("channel")
-            client.send_message(message, channel)
+            try:
+                message = call.data.get("message")
+                channel = call.data.get("channel")
+                if not message:
+                    _LOGGER.error("No message provided in service call")
+                    return
+                client.send_message(message, channel)
+            except Exception as e:
+                _LOGGER.error("Error handling send_message service: %s", e)
 
+        # Register the service
         hass.services.async_register(
             DOMAIN,
             SERVICE_SEND_MESSAGE,
@@ -269,6 +276,8 @@ async def async_setup_entry(
                 _LOGGER.error("Error during cleanup: %s", e)
 
         entry.async_on_unload(async_cleanup)
+
+        return True
 
     except Exception as e:
         _LOGGER.error("Error setting up IRC integration: %s", e)
