@@ -62,6 +62,7 @@ class IRCClient(irc.IRCClient):
         self.nickname = config["nick"]
         self.factory = None
         self._nick_attempts = 0
+        self._reconnecting = False
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -85,6 +86,7 @@ class IRCClient(irc.IRCClient):
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
             self._nick_attempts = 0  # Reset nick attempts on successful signon
+            self._reconnecting = False
             self.hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
             _LOGGER.debug("Joining channel: %s", channel)
@@ -98,9 +100,13 @@ class IRCClient(irc.IRCClient):
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
             self._nick_attempts = 0  # Reset nick attempts on disconnect
-            self.hass.bus.fire(f"{DOMAIN}_disconnected")
-            # Prøv å koble til på nytt
-            self.factory.clientConnectionLost(None, reason)
+            
+            if not self._reconnecting:
+                self._reconnecting = True
+                self.hass.bus.fire(f"{DOMAIN}_disconnected")
+                # Prøv å koble til på nytt
+                if self.factory and hasattr(self.factory, 'clientConnectionLost'):
+                    self.factory.clientConnectionLost(None, reason)
         except Exception as e:
             _LOGGER.error("Error in connectionLost: %s", e)
 
@@ -148,6 +154,7 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         self.hass = hass
         self.protocol = IRCClient
         self.maxDelay = 300  # Maximum delay between reconnection attempts
+        self._current_protocol = None
         _LOGGER.debug("IRC client factory initialized with config: %s", config)
 
     def buildProtocol(self, addr):
@@ -156,14 +163,16 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         self.resetDelay()  # Reset the delay when we successfully connect
         p = self.protocol(self.config, self.hass)
         p.factory = self
+        self._current_protocol = p
         return p
 
     def clientConnectionLost(self, connector, reason):
         """Handle lost connection."""
         _LOGGER.warning("Connection lost: %s", reason)
-        protocol.ReconnectingClientFactory.clientConnectionLost(
-            self, connector, reason
-        )
+        if self._current_protocol and not self._current_protocol._reconnecting:
+            protocol.ReconnectingClientFactory.clientConnectionLost(
+                self, connector, reason
+            )
 
     def clientConnectionFailed(self, connector, reason):
         """Handle failed connection."""
@@ -202,12 +211,22 @@ async def async_setup_entry(
         async_add_entities([sensor])
 
         # Connect to the IRC server
-        reactor.callFromThread(
-            reactor.connectTCP,
-            config["host"],
-            config["port"],
-            factory
-        )
+        if config["ssl"]:
+            options = CertificateOptions(verify=False)
+            reactor.callFromThread(
+                reactor.connectSSL,
+                config["host"],
+                config["port"],
+                factory,
+                options
+            )
+        else:
+            reactor.callFromThread(
+                reactor.connectTCP,
+                config["host"],
+                config["port"],
+                factory
+            )
 
         # Register cleanup
         async def async_cleanup():
@@ -256,27 +275,8 @@ class IRCSensor(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """Set up the sensor."""
-        self._factory = IRCClientFactory(
-            self._client._config, self._client.hass
-        )
-
-        if self._client._config["ssl"]:
-            # Opprett SSL-kontekst med tilpasset sertifikatvalidering
-            options = CertificateOptions(verify=False)
-            reactor.callFromThread(
-                reactor.connectSSL,
-                self._client._config["host"],
-                self._client._config["port"],
-                self._factory,
-                options
-            )
-        else:
-            reactor.callFromThread(
-                reactor.connectTCP,
-                self._client._config["host"],
-                self._client._config["port"],
-                self._factory
-            )
+        # We don't need to connect here as it's already done in async_setup_entry
+        pass
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up resources."""
