@@ -7,16 +7,30 @@ from typing import Any
 import threading
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, ssl
+from twisted.python import log
+from OpenSSL import SSL
+from twisted.internet.ssl import CertificateOptions
+from twisted.internet._sslverify import ClientTLSOptions
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
+
+
+class CustomClientTLSOptions(ClientTLSOptions):
+    """Custom TLS options for IRC client."""
+
+    def _identityVerifyingInfoCallback(self, connection, where, ret):
+        """Override certificate verification."""
+        return None
 
 
 class IRCClient(irc.IRCClient):
@@ -193,6 +207,7 @@ class IRCSensor(SensorEntity):
         self._name = name
         self._state = "disconnected"
         self._messages = []
+        self._factory = None
         _LOGGER.debug("IRC sensor initialized with name: %s", name)
 
     @property
@@ -212,6 +227,37 @@ class IRCSensor(SensorEntity):
             "messages": self._client.messages[-10:],  # Last 10 messages
             "connected": self._client.connected,
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Set up the sensor."""
+        self._factory = IRCClientFactory(self._client._config, self._client.hass)
+        
+        if self._client._config["ssl"]:
+            # Opprett SSL-kontekst med tilpasset sertifikatvalidering
+            options = CertificateOptions(
+                verify=False,
+                method=SSL.SSLv23_METHOD
+            )
+            reactor.connectSSL(
+                self._client._config["host"],
+                self._client._config["port"],
+                self._factory,
+                options
+            )
+        else:
+            reactor.connectTCP(
+                self._client._config["host"],
+                self._client._config["port"],
+                self._factory
+            )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up resources."""
+        if self._factory and self._factory.protocol:
+            try:
+                self._factory.protocol.quit("Shutting down")
+            except Exception as e:
+                _LOGGER.error("Error during shutdown: %s", e)
 
     async def async_update(self) -> None:
         """Update the sensor state."""
