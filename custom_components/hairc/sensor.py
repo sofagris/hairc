@@ -231,13 +231,10 @@ class IRCSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Set up the sensor."""
         self._factory = IRCClientFactory(self._client._config, self._client.hass)
-        
+
         if self._client._config["ssl"]:
             # Opprett SSL-kontekst med tilpasset sertifikatvalidering
-            options = CertificateOptions(
-                verify=False,
-                method=SSL.SSLv23_METHOD
-            )
+            options = CertificateOptions(verify=False)
             reactor.connectSSL(
                 self._client._config["host"],
                 self._client._config["port"],
