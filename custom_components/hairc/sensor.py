@@ -69,12 +69,22 @@ class IRCClient(irc.IRCClient):
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
+            # Prøv å koble til på nytt
+            self.factory.clientConnectionLost(None, reason)
         except Exception as e:
             _LOGGER.error("Error in connectionLost: %s", e)
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
         try:
+            # Håndter ping/pong
+            if message.lower() == "ping":
+                if channel == self.nickname:
+                    self.msg(user, "pong")
+                else:
+                    self.msg(channel, "pong")
+                return
+
             if channel == self.nickname:
                 msg = f"Private message from {user}: {message}"
                 self._add_message(msg)
@@ -250,9 +260,12 @@ class IRCSensor(SensorEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up resources."""
-        if self._factory and self._factory.protocol:
+        if self._factory and hasattr(self._factory, 'protocol') and self._factory.protocol:
             try:
-                self._factory.protocol.quit("Shutting down")
+                if hasattr(self._factory.protocol, 'quit'):
+                    self._factory.protocol.quit("Shutting down")
+                else:
+                    _LOGGER.debug("Protocol does not have quit method")
             except Exception as e:
                 _LOGGER.error("Error during shutdown: %s", e)
 
