@@ -7,22 +7,39 @@ from typing import Any
 import threading
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor, ssl
+from twisted.internet import protocol, reactor
 from twisted.python import log
-from OpenSSL import SSL
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
+
+# Global reactor thread
+_reactor_thread = None
+
+
+def start_reactor():
+    """Start the Twisted reactor in a separate thread."""
+    global _reactor_thread
+    if _reactor_thread is None or not _reactor_thread.is_alive():
+        def run_reactor():
+            try:
+                if not reactor.running:
+                    reactor.run(installSignalHandlers=False)
+            except Exception as e:
+                _LOGGER.error("Error in Twisted reactor: %s", e)
+
+        _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
+        _reactor_thread.start()
+        _LOGGER.debug("Started Twisted reactor thread")
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -173,30 +190,16 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
+        # Start the Twisted reactor if it's not running
+        start_reactor()
+
+        # Wait a moment for the reactor to start
+        await asyncio.sleep(1)
+
         factory = IRCClientFactory(config, hass)
         client = factory.buildProtocol(None)
         sensor = IRCSensor(client, entry.title)
         async_add_entities([sensor])
-
-        # Start the IRC client in the background
-        _LOGGER.info(
-            "Connecting to IRC server at %s:%s",
-            config["host"], config["port"]
-        )
-
-        # Start the Twisted reactor in a separate thread if it's not running
-        if not reactor.running:
-            def start_reactor():
-                try:
-                    reactor.run(installSignalHandlers=False)
-                except Exception as e:
-                    _LOGGER.error("Error in Twisted reactor: %s", e)
-
-            reactor_thread = threading.Thread(target=start_reactor, daemon=True)
-            reactor_thread.start()
-
-            # Wait a moment for the reactor to start
-            await asyncio.sleep(1)
 
         # Connect to the IRC server
         reactor.callFromThread(
@@ -253,19 +256,23 @@ class IRCSensor(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """Set up the sensor."""
-        self._factory = IRCClientFactory(self._client._config, self._client.hass)
+        self._factory = IRCClientFactory(
+            self._client._config, self._client.hass
+        )
 
         if self._client._config["ssl"]:
             # Opprett SSL-kontekst med tilpasset sertifikatvalidering
             options = CertificateOptions(verify=False)
-            reactor.connectSSL(
+            reactor.callFromThread(
+                reactor.connectSSL,
                 self._client._config["host"],
                 self._client._config["port"],
                 self._factory,
                 options
             )
         else:
-            reactor.connectTCP(
+            reactor.callFromThread(
+                reactor.connectTCP,
                 self._client._config["host"],
                 self._client._config["port"],
                 self._factory
@@ -273,7 +280,8 @@ class IRCSensor(SensorEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up resources."""
-        if self._factory and hasattr(self._factory, 'protocol') and self._factory.protocol:
+        if (self._factory and hasattr(self._factory, 'protocol') and
+                self._factory.protocol):
             try:
                 if hasattr(self._factory.protocol, 'quit'):
                     self._factory.protocol.quit("Shutting down")
