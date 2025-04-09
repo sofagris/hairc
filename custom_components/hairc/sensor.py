@@ -8,14 +8,15 @@ import threading
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
-from twisted.python import log
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
 
 from .const import DOMAIN
 
@@ -24,6 +25,13 @@ MAX_MESSAGES = 100  # Maximum number of messages to store
 
 # Global reactor thread
 _reactor_thread = None
+
+# Service schema
+SERVICE_SEND_MESSAGE = "send_message"
+SERVICE_SCHEMA = vol.Schema({
+    vol.Required("message"): cv.string,
+    vol.Optional("channel"): cv.string,
+})
 
 
 def start_reactor():
@@ -104,16 +112,17 @@ class IRCClient(irc.IRCClient):
             if not self._reconnecting:
                 self._reconnecting = True
                 self.hass.bus.fire(f"{DOMAIN}_disconnected")
-                # Prøv å koble til på nytt
-                if self.factory and hasattr(self.factory, 'clientConnectionLost'):
-                    self.factory.clientConnectionLost(None, reason)
+                # Try to reconnect
+                factory = self.factory
+                if factory and hasattr(factory, 'clientConnectionLost'):
+                    factory.clientConnectionLost(None, reason)
         except Exception as e:
             _LOGGER.error("Error in connectionLost: %s", e)
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
         try:
-            # Håndter ping/pong
+            # Handle ping/pong for test purposes
             if message.lower() == "ping":
                 if channel == self.nickname:
                     self.msg(user, "pong")
@@ -121,20 +130,20 @@ class IRCClient(irc.IRCClient):
                     self.msg(channel, "pong")
                 return
 
+            # Fire event for automations
+            event_data = {
+                "message": message,
+                "sender": user,
+                "channel": channel,
+                "type": "private" if channel == self.nickname else "public"
+            }
+            self.hass.bus.fire(f"{DOMAIN}_message", event_data)
+
             if channel == self.nickname:
                 msg = f"Private message from {user}: {message}"
-                self._add_message(msg)
-                self.hass.bus.fire(
-                    f"{DOMAIN}_message",
-                    {"message": message, "sender": user}
-                )
             else:
                 msg = f"Public message in {channel} from {user}: {message}"
-                self._add_message(msg)
-                self.hass.bus.fire(
-                    f"{DOMAIN}_message",
-                    {"message": message, "sender": user, "channel": channel}
-                )
+            self._add_message(msg)
         except Exception as e:
             _LOGGER.error("Error handling message: %s", e)
 
@@ -143,6 +152,15 @@ class IRCClient(irc.IRCClient):
         self.messages.append(message)
         if len(self.messages) > MAX_MESSAGES:
             self.messages = self.messages[-MAX_MESSAGES:]
+
+    def send_message(self, message: str, channel: str = None) -> None:
+        """Send a message to IRC."""
+        try:
+            target = channel or self._config["autojoins"][0]
+            reactor.callFromThread(self.msg, target, message)
+            _LOGGER.debug("Sent message to %s: %s", target, message)
+        except Exception as e:
+            _LOGGER.error("Error sending message: %s", e)
 
 
 class IRCClientFactory(protocol.ReconnectingClientFactory):
@@ -228,6 +246,20 @@ async def async_setup_entry(
                 factory
             )
 
+        # Register service
+        async def async_handle_send_message(call: ServiceCall) -> None:
+            """Handle the send_message service call."""
+            message = call.data.get("message")
+            channel = call.data.get("channel")
+            client.send_message(message, channel)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SEND_MESSAGE,
+            async_handle_send_message,
+            schema=SERVICE_SCHEMA
+        )
+
         # Register cleanup
         async def async_cleanup():
             try:
@@ -275,7 +307,7 @@ class IRCSensor(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """Set up the sensor."""
-        # We don't need to connect here as it's already done in async_setup_entry
+        # Connection is already handled in async_setup_entry
         pass
 
     async def async_will_remove_from_hass(self) -> None:
