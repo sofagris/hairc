@@ -44,6 +44,7 @@ class IRCClient(irc.IRCClient):
         self._config = config
         self.nickname = config["nick"]
         self.factory = None
+        self._nick_attempts = 0
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -51,11 +52,22 @@ class IRCClient(irc.IRCClient):
         _LOGGER.debug("Connection made to IRC server")
         super().connectionMade()
 
+    def alterCollidedNick(self, nickname):
+        """Generate an alternative nickname when there's a collision."""
+        self._nick_attempts += 1
+        if self._nick_attempts > 5:  # Maksimalt antall forsøk
+            _LOGGER.error("Too many nick collisions, giving up")
+            return None
+        new_nick = f"{nickname}_{self._nick_attempts}"
+        _LOGGER.debug("Nick collision, trying: %s", new_nick)
+        return new_nick
+
     def signedOn(self):
         """Handle successful connection."""
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
+            self._nick_attempts = 0  # Reset nick attempts on successful signon
             self.hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
             _LOGGER.debug("Joining channel: %s", channel)
@@ -68,6 +80,7 @@ class IRCClient(irc.IRCClient):
         try:
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
+            self._nick_attempts = 0  # Reset nick attempts on disconnect
             self.hass.bus.fire(f"{DOMAIN}_disconnected")
             # Prøv å koble til på nytt
             self.factory.clientConnectionLost(None, reason)
