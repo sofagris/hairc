@@ -231,6 +231,7 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         self.protocol = IRCClient
         self.maxDelay = 300  # Maximum delay between reconnection attempts
         self._current_protocol = None
+        self.message_callback = None
         _LOGGER.debug("IRC client factory initialized with config: %s", config)
 
     def buildProtocol(self, addr):
@@ -282,9 +283,13 @@ async def async_setup_entry(
         # Wait a moment for the reactor to start
         await asyncio.sleep(1)
 
-        factory = IRCClientFactory(config, hass)
+        # Create the sensor first
         sensor = IRCSensor(config)
         async_add_entities([sensor])
+
+        # Create the factory with the sensor's message callback
+        factory = IRCClientFactory(config, hass)
+        factory.message_callback = sensor._message_callback
 
         # Connect to the IRC server
         if config["ssl"]:
