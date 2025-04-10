@@ -71,6 +71,7 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
+        self._channels = set()  # Track joined channels
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -102,22 +103,23 @@ class IRCClient(irc.IRCClient):
         except Exception as e:
             _LOGGER.error("Error in signedOn: %s", e)
 
-    def connectionLost(self, reason):
-        """Handle lost connection."""
+    def joined(self, channel):
+        """Called when the bot joins a channel."""
         try:
-            _LOGGER.warning("Lost connection to IRC server: %s", reason)
-            self.connected = False
-            self._nick_attempts = 0  # Reset nick attempts on disconnect
-            
-            if not self._reconnecting:
-                self._reconnecting = True
-                self.hass.bus.fire(f"{DOMAIN}_disconnected")
-                # Try to reconnect
-                factory = self.factory
-                if factory and hasattr(factory, 'clientConnectionLost'):
-                    factory.clientConnectionLost(None, reason)
+            _LOGGER.debug("Successfully joined channel: %s", channel)
+            self._channels.add(channel)
+            self.hass.bus.fire(f"{DOMAIN}_channel_joined", {"channel": channel})
         except Exception as e:
-            _LOGGER.error("Error in connectionLost: %s", e)
+            _LOGGER.error("Error in joined: %s", e)
+
+    def left(self, channel):
+        """Called when the bot leaves a channel."""
+        try:
+            _LOGGER.debug("Left channel: %s", channel)
+            self._channels.discard(channel)
+            self.hass.bus.fire(f"{DOMAIN}_channel_left", {"channel": channel})
+        except Exception as e:
+            _LOGGER.error("Error in left: %s", e)
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
@@ -157,10 +159,48 @@ class IRCClient(irc.IRCClient):
         """Send a message to IRC."""
         try:
             target = channel or self._config["autojoins"][0]
+            
+            # Check if we're in the channel
+            if target not in self._channels:
+                _LOGGER.warning("Not in channel %s, attempting to join", target)
+                self.join(target)
+                # Wait a moment for the join to complete
+                reactor.callLater(2, self._send_message_after_join, target, message)
+                return
+                
             reactor.callFromThread(self.msg, target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
+
+    def _send_message_after_join(self, channel: str, message: str) -> None:
+        """Send a message after joining a channel."""
+        try:
+            if channel in self._channels:
+                reactor.callFromThread(self.msg, channel, message)
+                _LOGGER.debug("Sent message to %s: %s", channel, message)
+            else:
+                _LOGGER.error("Failed to join channel %s, message not sent", channel)
+        except Exception as e:
+            _LOGGER.error("Error in _send_message_after_join: %s", e)
+
+    def connectionLost(self, reason):
+        """Handle lost connection."""
+        try:
+            _LOGGER.warning("Lost connection to IRC server: %s", reason)
+            self.connected = False
+            self._nick_attempts = 0  # Reset nick attempts on disconnect
+            self._channels.clear()  # Clear channel list on disconnect
+
+            if not self._reconnecting:
+                self._reconnecting = True
+                self.hass.bus.fire(f"{DOMAIN}_disconnected")
+                # Try to reconnect
+                factory = self.factory
+                if factory and hasattr(factory, 'clientConnectionLost'):
+                    factory.clientConnectionLost(None, reason)
+        except Exception as e:
+            _LOGGER.error("Error in connectionLost: %s", e)
 
 
 class IRCClientFactory(protocol.ReconnectingClientFactory):
