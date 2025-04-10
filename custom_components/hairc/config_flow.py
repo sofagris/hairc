@@ -53,7 +53,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         try:
-            # Validate the channel name
+            # Validate the channel name 
             channel = user_input["channel"]
             if not channel.startswith("#"):
                 channel = f"#{channel}"
