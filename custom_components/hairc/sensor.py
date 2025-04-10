@@ -71,7 +71,7 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
-        self.hass = hass
+        self._hass = hass
         self._channels = set()  # Track joined channels
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
@@ -81,7 +81,8 @@ class IRCClient(irc.IRCClient):
         self.connected = True
         self._nick_attempts = 0
         self._reconnecting = False
-        self.hass.bus.fire(f"{DOMAIN}_connected")
+        if hasattr(self._hass, 'bus'):
+            self._hass.bus.fire(f"{DOMAIN}_connected")
         channel = self._config["autojoins"][0]
         _LOGGER.debug("Joining channel: %s", channel)
         self.join(channel)
@@ -96,35 +97,44 @@ class IRCClient(irc.IRCClient):
         _LOGGER.debug("Nick collision, trying: %s", new_nick)
         return new_nick
 
-    def signedOn(self):
+    def signedOn(self) -> None:
         """Handle successful connection."""
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
-            self._nick_attempts = 0  # Reset nick attempts on successful signon
+            self._nick_attempts = 0
             self._reconnecting = False
-            self.hass.bus.fire(f"{DOMAIN}_connected")
+            if hasattr(self._hass, 'bus'):
+                self._hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
             _LOGGER.debug("Joining channel: %s", channel)
             self.join(channel)
         except Exception as e:
             _LOGGER.error("Error in signedOn: %s", e)
 
-    def joined(self, channel):
+    def joined(self, channel: str) -> None:
         """Called when the bot joins a channel."""
         try:
             _LOGGER.debug("Successfully joined channel: %s", channel)
             self._channels.add(channel)
-            self.hass.bus.fire(f"{DOMAIN}_channel_joined", {"channel": channel})
+            if hasattr(self._hass, 'bus'):
+                self._hass.bus.fire(
+                    f"{DOMAIN}_channel_joined",
+                    {"channel": channel}
+                )
         except Exception as e:
             _LOGGER.error("Error in joined: %s", e)
 
-    def left(self, channel):
+    def left(self, channel: str) -> None:
         """Called when the bot leaves a channel."""
         try:
             _LOGGER.debug("Left channel: %s", channel)
             self._channels.discard(channel)
-            self.hass.bus.fire(f"{DOMAIN}_channel_left", {"channel": channel})
+            if hasattr(self._hass, 'bus'):
+                self._hass.bus.fire(
+                    f"{DOMAIN}_channel_left",
+                    {"channel": channel}
+                )
         except Exception as e:
             _LOGGER.error("Error in left: %s", e)
 
@@ -146,7 +156,7 @@ class IRCClient(irc.IRCClient):
                 "channel": channel,
                 "type": "private" if channel == self.nickname else "public"
             }
-            self.hass.bus.fire(f"{DOMAIN}_message", event_data)
+            self._hass.bus.fire(f"{DOMAIN}_message", event_data)
 
             if channel == self.nickname:
                 msg = f"Private message from {user}: {message}"
@@ -191,17 +201,18 @@ class IRCClient(irc.IRCClient):
         except Exception as e:
             _LOGGER.error("Error in _send_message_after_join: %s", e)
 
-    def connectionLost(self, reason):
+    def connectionLost(self, reason) -> None:
         """Handle lost connection."""
         try:
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
-            self._nick_attempts = 0  # Reset nick attempts on disconnect
-            self._channels.clear()  # Clear channel list on disconnect
+            self._nick_attempts = 0
+            self._channels.clear()
 
             if not self._reconnecting:
                 self._reconnecting = True
-                self.hass.bus.fire(f"{DOMAIN}_disconnected")
+                if hasattr(self._hass, 'bus'):
+                    self._hass.bus.fire(f"{DOMAIN}_disconnected")
                 # Try to reconnect
                 factory = self.factory
                 if factory and hasattr(factory, 'clientConnectionLost'):
