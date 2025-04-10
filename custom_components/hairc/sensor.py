@@ -292,22 +292,26 @@ async def async_setup_entry(
         factory.message_callback = sensor._message_callback
 
         # Connect to the IRC server
-        if config["ssl"]:
-            options = CertificateOptions(verify=False)
-            reactor.callFromThread(
-                reactor.connectSSL,
-                config["host"],
-                config["port"],
-                factory,
-                options
-            )
-        else:
-            reactor.callFromThread(
-                reactor.connectTCP,
-                config["host"],
-                config["port"],
-                factory
-            )
+        def connect():
+            try:
+                if config["ssl"]:
+                    options = CertificateOptions(verify=False)
+                    reactor.connectSSL(
+                        config["host"],
+                        config["port"],
+                        factory,
+                        options
+                    )
+                else:
+                    reactor.connectTCP(
+                        config["host"],
+                        config["port"],
+                        factory
+                    )
+            except Exception as e:
+                _LOGGER.error("Error connecting to IRC server: %s", e)
+
+        reactor.callFromThread(connect)
 
         # Register service
         async def async_handle_send_message(call: ServiceCall) -> None:
