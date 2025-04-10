@@ -264,7 +264,6 @@ async def async_setup_entry(
         await asyncio.sleep(1)
 
         factory = IRCClientFactory(config, hass)
-        client = factory.buildProtocol(None)
         sensor = IRCSensor(config)
         async_add_entities([sensor])
 
@@ -291,7 +290,6 @@ async def async_setup_entry(
             """Handle the send_message service call."""
             try:
                 message = call.data.get("message")
-                channel = call.data.get("channel")
                 if not message:
                     _LOGGER.error("No message provided in service call")
                     return
@@ -334,8 +332,8 @@ class IRCSensor(SensorEntity):
         self._last_messages = []
         self._protocol = None
         self._reactor_thread = None
-        self._name = f"IRC: {config['server']}"
-        self._unique_id = f"{config['server']}:{config['port']}:{config['nickname']}"
+        self._name = f"IRC: {config['host']}"
+        self._unique_id = f"{config['host']}:{config['port']}:{config['nick']}"
 
     @property
     def name(self) -> str:
@@ -382,14 +380,14 @@ class IRCSensor(SensorEntity):
                 factory = IRCClientFactory(self._config, self._message_callback)
                 if self._config.get("ssl", False):
                     reactor.connectSSL(
-                        self._config["server"],
+                        self._config["host"],
                         self._config["port"],
                         factory,
                         CertificateOptions(verify=False),
                     )
                 else:
                     reactor.connectTCP(
-                        self._config["server"],
+                        self._config["host"],
                         self._config["port"],
                         factory,
                     )
@@ -424,8 +422,9 @@ class IRCSensor(SensorEntity):
         def send():
             try:
                 if self._protocol is not None and self._protocol.transport is not None:
-                    self._protocol.msg(self._config["channel"], message)
-                    _LOGGER.debug("Message sent to channel %s: %s", self._config["channel"], message)
+                    self._protocol.msg(self._config["autojoins"][0], message)
+                    _LOGGER.debug("Message sent to channel %s: %s", 
+                                self._config["autojoins"][0], message)
                 else:
                     _LOGGER.error("Cannot send message: Not connected to IRC server")
             except Exception as e:
