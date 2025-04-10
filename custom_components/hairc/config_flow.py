@@ -91,9 +91,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     channel = f"#{channel}"
                 user_input["channel"] = channel
 
-                # Update the existing entry
+                # Update the existing entry with new title
+                server = user_input["server"]
                 self.hass.config_entries.async_update_entry(
                     entry,
+                    title=f"IRC: {server}",
                     data=user_input,
                 )
 
@@ -122,6 +124,36 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             data_schema=schema,
             errors=errors,
+        )
+
+    @staticmethod
+    @config_entries.HANDLERS.register(DOMAIN)
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        return await self.async_step_reconfigure(user_input)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration."""
+        return await self.hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_RECONFIGURE, "entry_id": self.config_entry.entry_id},
+            data=user_input,
         )
 
 
