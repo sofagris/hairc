@@ -63,7 +63,7 @@ class IRCClient(irc.IRCClient):
 
     def __init__(self, config: dict[str, Any], hass: HomeAssistant) -> None:
         """Initialize the IRC client."""
-        self.hass = hass
+        super().__init__()
         self.messages = []
         self.connected = False
         self._config = config
@@ -71,13 +71,20 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
+        self.hass = hass
         self._channels = set()  # Track joined channels
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
-    def connectionMade(self):
+    def connectionMade(self) -> None:
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
-        super().connectionMade()
+        self.connected = True
+        self._nick_attempts = 0
+        self._reconnecting = False
+        self.hass.bus.fire(f"{DOMAIN}_connected")
+        channel = self._config["autojoins"][0]
+        _LOGGER.debug("Joining channel: %s", channel)
+        self.join(channel)
 
     def alterCollidedNick(self, nickname):
         """Generate an alternative nickname when there's a collision."""
@@ -247,13 +254,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up the IRC sensor from a config entry."""
     try:
+        # Map the entry data to the expected config format
         config = {
-            "host": entry.data["server"],
-            "port": entry.data["port"],
-            "nick": entry.data["nickname"],
-            "autojoins": [entry.data["channel"]],
+            "host": entry.data.get("server", ""),  # Use get() to avoid KeyError
+            "port": entry.data.get("port", 6667),
+            "nick": entry.data.get("nickname", ""),
+            "autojoins": [entry.data.get("channel", "")],
             "ssl": entry.data.get("ssl", False),
-            "password": entry.data.get("password"),
+            "password": entry.data.get("password", ""),
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
