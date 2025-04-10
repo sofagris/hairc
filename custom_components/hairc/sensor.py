@@ -63,7 +63,7 @@ class IRCClient(irc.IRCClient):
 
     def __init__(self, config: dict[str, Any], hass: HomeAssistant) -> None:
         """Initialize the IRC client."""
-        super().__init__()
+        self.hass = hass
         self.messages = []
         self.connected = False
         self._config = config
@@ -71,21 +71,12 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
-        self._hass = hass
-        self._channels = set()  # Track joined channels
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
-    def connectionMade(self) -> None:
+    def connectionMade(self):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
-        self.connected = True
-        self._nick_attempts = 0
-        self._reconnecting = False
-        if hasattr(self._hass, 'bus'):
-            self._hass.bus.fire(f"{DOMAIN}_connected")
-        channel = self._config["autojoins"][0]
-        _LOGGER.debug("Joining channel: %s", channel)
-        self.join(channel)
+        super().connectionMade()
 
     def alterCollidedNick(self, nickname):
         """Generate an alternative nickname when there's a collision."""
@@ -97,46 +88,36 @@ class IRCClient(irc.IRCClient):
         _LOGGER.debug("Nick collision, trying: %s", new_nick)
         return new_nick
 
-    def signedOn(self) -> None:
+    def signedOn(self):
         """Handle successful connection."""
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
-            self._nick_attempts = 0
+            self._nick_attempts = 0  # Reset nick attempts on successful signon
             self._reconnecting = False
-            if hasattr(self._hass, 'bus'):
-                self._hass.bus.fire(f"{DOMAIN}_connected")
+            self.hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
             _LOGGER.debug("Joining channel: %s", channel)
             self.join(channel)
         except Exception as e:
             _LOGGER.error("Error in signedOn: %s", e)
 
-    def joined(self, channel: str) -> None:
-        """Called when the bot joins a channel."""
+    def connectionLost(self, reason):
+        """Handle lost connection."""
         try:
-            _LOGGER.debug("Successfully joined channel: %s", channel)
-            self._channels.add(channel)
-            if hasattr(self._hass, 'bus'):
-                self._hass.bus.fire(
-                    f"{DOMAIN}_channel_joined",
-                    {"channel": channel}
-                )
+            _LOGGER.warning("Lost connection to IRC server: %s", reason)
+            self.connected = False
+            self._nick_attempts = 0  # Reset nick attempts on disconnect
+            
+            if not self._reconnecting:
+                self._reconnecting = True
+                self.hass.bus.fire(f"{DOMAIN}_disconnected")
+                # Try to reconnect
+                factory = self.factory
+                if factory and hasattr(factory, 'clientConnectionLost'):
+                    factory.clientConnectionLost(None, reason)
         except Exception as e:
-            _LOGGER.error("Error in joined: %s", e)
-
-    def left(self, channel: str) -> None:
-        """Called when the bot leaves a channel."""
-        try:
-            _LOGGER.debug("Left channel: %s", channel)
-            self._channels.discard(channel)
-            if hasattr(self._hass, 'bus'):
-                self._hass.bus.fire(
-                    f"{DOMAIN}_channel_left",
-                    {"channel": channel}
-                )
-        except Exception as e:
-            _LOGGER.error("Error in left: %s", e)
+            _LOGGER.error("Error in connectionLost: %s", e)
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
@@ -156,7 +137,7 @@ class IRCClient(irc.IRCClient):
                 "channel": channel,
                 "type": "private" if channel == self.nickname else "public"
             }
-            self._hass.bus.fire(f"{DOMAIN}_message", event_data)
+            self.hass.bus.fire(f"{DOMAIN}_message", event_data)
 
             if channel == self.nickname:
                 msg = f"Private message from {user}: {message}"
@@ -176,49 +157,10 @@ class IRCClient(irc.IRCClient):
         """Send a message to IRC."""
         try:
             target = channel or self._config["autojoins"][0]
-            
-            # Check if we're in the channel
-            if target not in self._channels:
-                _LOGGER.warning("Not in channel %s, attempting to join", target)
-                self.join(target)
-                # Wait a moment for the join to complete
-                reactor.callLater(2, self._send_message_after_join, target, message)
-                return
-                
             reactor.callFromThread(self.msg, target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
-
-    def _send_message_after_join(self, channel: str, message: str) -> None:
-        """Send a message after joining a channel."""
-        try:
-            if channel in self._channels:
-                reactor.callFromThread(self.msg, channel, message)
-                _LOGGER.debug("Sent message to %s: %s", channel, message)
-            else:
-                _LOGGER.error("Failed to join channel %s, message not sent", channel)
-        except Exception as e:
-            _LOGGER.error("Error in _send_message_after_join: %s", e)
-
-    def connectionLost(self, reason) -> None:
-        """Handle lost connection."""
-        try:
-            _LOGGER.warning("Lost connection to IRC server: %s", reason)
-            self.connected = False
-            self._nick_attempts = 0
-            self._channels.clear()
-
-            if not self._reconnecting:
-                self._reconnecting = True
-                if hasattr(self._hass, 'bus'):
-                    self._hass.bus.fire(f"{DOMAIN}_disconnected")
-                # Try to reconnect
-                factory = self.factory
-                if factory and hasattr(factory, 'clientConnectionLost'):
-                    factory.clientConnectionLost(None, reason)
-        except Exception as e:
-            _LOGGER.error("Error in connectionLost: %s", e)
 
 
 class IRCClientFactory(protocol.ReconnectingClientFactory):
@@ -231,7 +173,6 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         self.protocol = IRCClient
         self.maxDelay = 300  # Maximum delay between reconnection attempts
         self._current_protocol = None
-        self.message_callback = None
         _LOGGER.debug("IRC client factory initialized with config: %s", config)
 
     def buildProtocol(self, addr):
@@ -266,14 +207,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the IRC sensor from a config entry."""
     try:
-        # Map the entry data to the expected config format
         config = {
-            "host": entry.data.get("server", ""),  # Use get() to avoid KeyError
-            "port": entry.data.get("port", 6667),
-            "nick": entry.data.get("nickname", ""),
-            "autojoins": [entry.data.get("channel", "")],
+            "host": entry.data["server"],
+            "port": entry.data["port"],
+            "nick": entry.data["nickname"],
+            "autojoins": [entry.data["channel"]],
             "ssl": entry.data.get("ssl", False),
-            "password": entry.data.get("password", ""),
+            "password": entry.data.get("password"),
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
@@ -283,45 +223,39 @@ async def async_setup_entry(
         # Wait a moment for the reactor to start
         await asyncio.sleep(1)
 
-        # Create the sensor first
-        sensor = IRCSensor(config)
+        factory = IRCClientFactory(config, hass)
+        client = factory.buildProtocol(None)
+        sensor = IRCSensor(client, entry.title)
         async_add_entities([sensor])
 
-        # Create the factory with the sensor's message callback
-        factory = IRCClientFactory(config, hass)
-        factory.message_callback = sensor._message_callback
-
         # Connect to the IRC server
-        def connect():
-            try:
-                if config["ssl"]:
-                    options = CertificateOptions(verify=False)
-                    reactor.connectSSL(
-                        config["host"],
-                        config["port"],
-                        factory,
-                        options
-                    )
-                else:
-                    reactor.connectTCP(
-                        config["host"],
-                        config["port"],
-                        factory
-                    )
-            except Exception as e:
-                _LOGGER.error("Error connecting to IRC server: %s", e)
-
-        reactor.callFromThread(connect)
+        if config["ssl"]:
+            options = CertificateOptions(verify=False)
+            reactor.callFromThread(
+                reactor.connectSSL,
+                config["host"],
+                config["port"],
+                factory,
+                options
+            )
+        else:
+            reactor.callFromThread(
+                reactor.connectTCP,
+                config["host"],
+                config["port"],
+                factory
+            )
 
         # Register service
         async def async_handle_send_message(call: ServiceCall) -> None:
             """Handle the send_message service call."""
             try:
                 message = call.data.get("message")
+                channel = call.data.get("channel")
                 if not message:
                     _LOGGER.error("No message provided in service call")
                     return
-                sensor.async_send_message(message)
+                client.send_message(message, channel)
             except Exception as e:
                 _LOGGER.error("Error handling send_message service: %s", e)
 
@@ -353,15 +287,14 @@ async def async_setup_entry(
 class IRCSensor(SensorEntity):
     """Representation of an IRC sensor."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, client: IRCClient, name: str) -> None:
         """Initialize the sensor."""
-        self._config = config
-        self._state = None
-        self._last_messages = []
-        self._protocol = None
-        self._reactor_thread = None
-        self._name = f"IRC: {config['host']}"
-        self._unique_id = f"{config['host']}:{config['port']}:{config['nick']}"
+        self._client = client
+        self._name = name
+        self._state = "disconnected"
+        self._messages = []
+        self._factory = None
+        _LOGGER.debug("IRC sensor initialized with name: %s", name)
 
     @property
     def name(self) -> str:
@@ -369,98 +302,35 @@ class IRCSensor(SensorEntity):
         return self._name
 
     @property
-    def unique_id(self) -> str:
-        """Return a unique ID."""
-        return self._unique_id
-
-    @property
-    def state(self) -> str | None:
+    def state(self) -> str:
         """Return the state of the sensor."""
-        return self._state
+        return "connected" if self._client.connected else "disconnected"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
-        return {"last_messages": self._last_messages}
+        return {
+            "messages": self._client.messages[-10:],  # Last 10 messages
+            "connected": self._client.connected,
+        }
 
     async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await self._connect()
+        """Set up the sensor."""
+        # Connection is already handled in async_setup_entry
+        pass
 
     async def async_will_remove_from_hass(self) -> None:
-        """Run when entity will be removed from hass."""
-        await self._disconnect()
-
-    async def _connect(self) -> None:
-        """Connect to the IRC server."""
-        if self._reactor_thread is None or not self._reactor_thread.is_alive():
-            self._reactor_thread = threading.Thread(
-                target=start_reactor, daemon=True
-            )
-            self._reactor_thread.start()
-
-        def connect():
+        """Clean up resources."""
+        if (self._factory and hasattr(self._factory, 'protocol') and
+                self._factory.protocol):
             try:
-                if self._protocol is not None:
-                    self._protocol.transport.loseConnection()
-                    self._protocol = None
-
-                factory = IRCClientFactory(self._config, self._message_callback)
-                if self._config.get("ssl", False):
-                    reactor.connectSSL(
-                        self._config["host"],
-                        self._config["port"],
-                        factory,
-                        CertificateOptions(verify=False),
-                    )
+                if hasattr(self._factory.protocol, 'quit'):
+                    self._factory.protocol.quit("Shutting down")
                 else:
-                    reactor.connectTCP(
-                        self._config["host"],
-                        self._config["port"],
-                        factory,
-                    )
-                self._protocol = factory.protocol
+                    _LOGGER.debug("Protocol does not have quit method")
             except Exception as e:
-                _LOGGER.error("Error connecting to IRC server: %s", e)
-
-        reactor.callFromThread(connect)
-
-    async def _disconnect(self) -> None:
-        """Disconnect from the IRC server."""
-        def disconnect():
-            try:
-                if self._protocol is not None:
-                    self._protocol.transport.loseConnection()
-                    self._protocol = None
-            except Exception as e:
-                _LOGGER.error("Error disconnecting from IRC server: %s", e)
-
-        reactor.callFromThread(disconnect)
-
-    def _message_callback(self, message: str) -> None:
-        """Handle incoming messages."""
-        self._last_messages.append(message)
-        if len(self._last_messages) > 10:
-            self._last_messages.pop(0)
-        self._state = message
-        self.async_write_ha_state()
-
-    async def async_send_message(self, message: str) -> None:
-        """Send a message to the IRC channel."""
-        def send():
-            try:
-                if self._protocol is not None and self._protocol.transport is not None:
-                    self._protocol.msg(self._config["autojoins"][0], message)
-                    _LOGGER.debug("Message sent to channel %s: %s", 
-                                self._config["autojoins"][0], message)
-                else:
-                    _LOGGER.error("Cannot send message: Not connected to IRC server")
-            except Exception as e:
-                _LOGGER.error("Error sending message: %s", e)
-
-        reactor.callFromThread(send)
+                _LOGGER.error("Error during shutdown: %s", e)
 
     async def async_update(self) -> None:
         """Update the sensor state."""
-        # No need to update as we receive updates through callbacks
-        pass
+        self._state = "connected" if self._client.connected else "disconnected"
