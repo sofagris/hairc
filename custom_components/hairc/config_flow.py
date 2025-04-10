@@ -77,7 +77,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle a reconfiguration flow initiated by the user."""
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
         if entry is None:
             return self.async_abort(reason="not_found")
 
@@ -150,9 +152,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle reconfiguration."""
+        context = {
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": self.config_entry.entry_id
+        }
         return await self.hass.config_entries.flow.async_init(
             DOMAIN,
-            context={"source": config_entries.SOURCE_RECONFIGURE, "entry_id": self.config_entry.entry_id},
+            context=context,
             data=user_input,
         )
 
