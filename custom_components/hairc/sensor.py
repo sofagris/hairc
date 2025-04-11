@@ -35,7 +35,7 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 
-def start_reactor():
+async def start_reactor():
     """Start the Twisted reactor in a separate thread."""
     global _reactor_thread
     if _reactor_thread is None or not _reactor_thread.is_alive():
@@ -49,8 +49,7 @@ def start_reactor():
         _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
         _reactor_thread.start()
         _LOGGER.debug("Started Twisted reactor thread")
-        # Wait a moment to ensure reactor is running
-        time.sleep(1)
+        await asyncio.sleep(1)  # Wait for reactor to start
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -297,7 +296,7 @@ async def async_setup_entry(
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
         # Start the Twisted reactor and wait for it
-        start_reactor()
+        await start_reactor()
         await asyncio.sleep(2)  # Give more time for reactor to start
 
         # Create factory and sensor
