@@ -27,6 +27,7 @@ MAX_MESSAGES = 100  # Maximum number of messages to store
 _reactor_thread = None
 _reactor_ready = asyncio.Event()
 _reactor_lock = threading.Lock()
+_reactor_started = False
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
@@ -36,30 +37,33 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 
+def run_reactor():
+    """Run the Twisted reactor in a separate thread."""
+    try:
+        if not reactor.running:
+            reactor.run(installSignalHandlers=False)
+    except Exception as e:
+        _LOGGER.error("Error in Twisted reactor: %s", e)
+    finally:
+        _reactor_ready.set()
+
+
 async def start_reactor():
     """Start the Twisted reactor in a separate thread."""
-    global _reactor_thread
+    global _reactor_thread, _reactor_started
     with _reactor_lock:
-        if _reactor_thread is None or not _reactor_thread.is_alive():
-            def run_reactor():
-                try:
-                    if not reactor.running:
-                        reactor.run(installSignalHandlers=False)
-                except Exception as e:
-                    _LOGGER.error("Error in Twisted reactor: %s", e)
-                finally:
-                    _reactor_ready.set()
-
+        if not _reactor_started:
             _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
             _reactor_thread.start()
             _LOGGER.debug("Started Twisted reactor thread")
             try:
-                await asyncio.wait_for(_reactor_ready.wait(), timeout=10)
+                await asyncio.wait_for(_reactor_ready.wait(), timeout=5)
+                _reactor_started = True
                 _LOGGER.debug("Twisted reactor is ready")
+                return True
             except asyncio.TimeoutError:
                 _LOGGER.error("Timeout waiting for Twisted reactor to start")
                 return False
-            return True
         return True
 
 
