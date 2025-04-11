@@ -282,6 +282,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the IRC sensor from a config entry."""
     try:
+        # Get configuration
         config = {
             "host": entry.data["server"],
             "port": entry.data["port"],
@@ -292,20 +293,16 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
-        # Start the Twisted reactor if it's not running
+        # Start the Twisted reactor
         start_reactor()
+        await asyncio.sleep(1)  # Wait for reactor to start
 
-        # Wait a moment for the reactor to start
-        await asyncio.sleep(1)
-
-        # Create the factory first
+        # Create factory and sensor
         factory = IRCClientFactory(config, hass)
-        
-        # Create the sensor with the factory
         sensor = IRCSensor(factory, entry.title)
         async_add_entities([sensor])
 
-        # Connect to the IRC server
+        # Connect to IRC server
         def connect():
             try:
                 if config["ssl"]:
@@ -328,37 +325,34 @@ async def async_setup_entry(
         reactor.callFromThread(connect)
 
         # Register service
-        async def async_handle_send_message(call: ServiceCall) -> None:
+        async def handle_send_message(call: ServiceCall) -> None:
             """Handle the send_message service call."""
             try:
                 message = call.data.get("message")
-                channel = call.data.get("channel")
                 if not message:
                     _LOGGER.error("No message provided in service call")
                     return
-                await sensor.async_send_message(message, channel)
+                await sensor.async_send_message(message)
             except Exception as e:
                 _LOGGER.error("Error handling send_message service: %s", e)
 
-        # Register the service
         hass.services.async_register(
             DOMAIN,
             SERVICE_SEND_MESSAGE,
-            async_handle_send_message,
+            handle_send_message,
             schema=SERVICE_SCHEMA
         )
 
         # Register cleanup
-        async def async_cleanup():
+        async def cleanup():
             try:
                 if reactor.running:
                     reactor.callFromThread(reactor.stop)
             except Exception as e:
                 _LOGGER.error("Error during cleanup: %s", e)
 
-        entry.async_on_unload(async_cleanup)
+        entry.async_on_unload(cleanup)
 
-        # Return True to indicate successful setup
         return True
 
     except Exception as e:
