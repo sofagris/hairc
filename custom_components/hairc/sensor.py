@@ -71,6 +71,15 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
+        # Initialize supported features with default values
+        self.supported = type('Supported', (), {
+            'getFeature': lambda self, feature: {
+                'NICKLEN': 30,
+                'CHANNELLEN': 200,
+                'TOPICLEN': 390,
+                'LINELEN': 512
+            }.get(feature, None)
+        })()
         _LOGGER.debug("IRC client initialized with config: %s", config)
 
     def connectionMade(self):
@@ -161,6 +170,20 @@ class IRCClient(irc.IRCClient):
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
+
+    def irc_RPL_ISUPPORT(self, prefix, params):
+        """Handle ISUPPORT message from server."""
+        for param in params[1:-1]:
+            if '=' in param:
+                feature, value = param.split('=', 1)
+                if hasattr(self.supported, 'getFeature'):
+                    self.supported.getFeature = lambda self, f: {
+                        feature: value,
+                        'NICKLEN': 30,
+                        'CHANNELLEN': 200,
+                        'TOPICLEN': 390,
+                        'LINELEN': 512
+                    }.get(f, None)
 
 
 class IRCClientFactory(protocol.ReconnectingClientFactory):
