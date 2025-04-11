@@ -22,11 +22,11 @@ import voluptuous as vol
 
 from .const import DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
-MAX_MESSAGES = 100  # Maximum number of messages to store
-
 # Global reactor thread
 _reactor_thread = None
+
+_LOGGER = logging.getLogger(__name__)
+MAX_MESSAGES = 100  # Maximum number of messages to store
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
