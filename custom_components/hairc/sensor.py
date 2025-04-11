@@ -7,7 +7,7 @@ from typing import Any
 import threading
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor, defer
+from twisted.internet import protocol, reactor
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
 from twisted.internet import endpoints
@@ -24,12 +24,6 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
-
-# Global reactor thread and event
-_reactor_thread = None
-_reactor_ready = asyncio.Event()
-_reactor_lock = threading.Lock()
-_reactor_started = False
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
@@ -48,32 +42,18 @@ def run_reactor():
             _LOGGER.debug("Twisted reactor stopped")
     except Exception as e:
         _LOGGER.error("Error in Twisted reactor: %s", e)
-    finally:
-        _reactor_ready.set()
 
 
 async def start_reactor():
     """Start the Twisted reactor in a separate thread."""
-    global _reactor_thread, _reactor_started
-    with _reactor_lock:
-        if not _reactor_started:
-            _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
-            _reactor_thread.start()
-            _LOGGER.debug("Started Twisted reactor thread")
-            try:
-                # Wait for reactor to start
-                for _ in range(5):  # Try 5 times with 1 second delay
-                    if reactor.running:
-                        _reactor_started = True
-                        _LOGGER.debug("Twisted reactor is ready")
-                        return True
-                    await asyncio.sleep(1)
-                _LOGGER.error("Timeout waiting for Twisted reactor to start")
-                return False
-            except Exception as e:
-                _LOGGER.error("Error starting Twisted reactor: %s", e)
-                return False
+    global _reactor_thread
+    if _reactor_thread is None or not _reactor_thread.is_alive():
+        _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
+        _reactor_thread.start()
+        _LOGGER.debug("Started Twisted reactor thread")
+        await asyncio.sleep(1)  # Wait for reactor to start
         return True
+    return True
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -336,34 +316,37 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
+        # Start the Twisted reactor
+        if not await start_reactor():
+            _LOGGER.error("Failed to start Twisted reactor")
+            return False
+
         # Create factory and sensor
         factory = IRCClientFactory(config, hass)
         sensor = IRCSensor(factory, entry.title)
         async_add_entities([sensor])
 
         # Connect to IRC server
-        if config["ssl"]:
-            endpoint = endpoints.SSL4ClientEndpoint(
-                reactor,
-                config["host"],
-                config["port"],
-                CertificateOptions(verify=False)
-            )
-        else:
-            endpoint = endpoints.TCP4ClientEndpoint(
-                reactor,
-                config["host"],
-                config["port"]
-            )
+        def connect():
+            try:
+                if config["ssl"]:
+                    options = CertificateOptions(verify=False)
+                    reactor.connectSSL(
+                        config["host"],
+                        config["port"],
+                        factory,
+                        options
+                    )
+                else:
+                    reactor.connectTCP(
+                        config["host"],
+                        config["port"],
+                        factory
+                    )
+            except Exception as e:
+                _LOGGER.error("Error connecting to IRC server: %s", e)
 
-        # Connect using endpoint and convert Deferred to Future
-        try:
-            deferred = endpoint.connect(factory)
-            await deferred_to_future(deferred)
-            _LOGGER.debug("Connected to IRC server")
-        except Exception as e:
-            _LOGGER.error("Failed to connect to IRC server: %s", e)
-            return False
+        reactor.callFromThread(connect)
 
         # Register service
         async def handle_send_message(call: ServiceCall) -> None:
@@ -388,7 +371,7 @@ async def async_setup_entry(
         async def cleanup():
             try:
                 if reactor.running:
-                    reactor.stop()
+                    reactor.callFromThread(reactor.stop)
             except Exception as e:
                 _LOGGER.error("Error during cleanup: %s", e)
 
