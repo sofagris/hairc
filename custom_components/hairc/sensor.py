@@ -86,6 +86,12 @@ class IRCClient(irc.IRCClient):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
         super().connectionMade()
+        self.connected = True
+        self._nick_attempts = 0
+        if hasattr(self.hass, 'bus'):
+            self.hass.bus.fire(f"{DOMAIN}_connected")
+        channel = self._config["autojoins"][0]
+        self.join(channel)
 
     def alterCollidedNick(self, nickname):
         """Generate an alternative nickname when there's a collision."""
@@ -165,6 +171,10 @@ class IRCClient(irc.IRCClient):
     def send_message(self, message: str, channel: str = None) -> None:
         """Send a message to IRC."""
         try:
+            if not self.transport:
+                _LOGGER.error("Cannot send message: No transport available")
+                return
+                
             target = channel or self._config["autojoins"][0]
             reactor.callFromThread(self.msg, target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
