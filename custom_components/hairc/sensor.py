@@ -7,10 +7,11 @@ from typing import Any
 import threading
 
 from twisted.words.protocols import irc
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, defer
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
 from twisted.internet import endpoints
+from twisted.internet.task import react
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -300,6 +301,23 @@ class IRCSensor(SensorEntity):
             _LOGGER.error("Error sending message: %s", e)
 
 
+def deferred_to_future(deferred):
+    """Convert a Deferred to a Future."""
+    loop = asyncio.get_event_loop()
+    future = loop.create_future()
+
+    def callback(result):
+        if not future.done():
+            future.set_result(result)
+
+    def errback(failure):
+        if not future.done():
+            future.set_exception(failure.value)
+
+    deferred.addCallbacks(callback, errback)
+    return future
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -338,9 +356,10 @@ async def async_setup_entry(
                 config["port"]
             )
 
-        # Connect using endpoint
+        # Connect using endpoint and convert Deferred to Future
         try:
-            await endpoints.connectProtocol(endpoint, factory.buildProtocol(None))
+            deferred = endpoint.connect(factory)
+            await deferred_to_future(deferred)
             _LOGGER.debug("Connected to IRC server")
         except Exception as e:
             _LOGGER.error("Failed to connect to IRC server: %s", e)
