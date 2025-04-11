@@ -358,8 +358,9 @@ async def async_setup_entry(
 
         entry.async_on_unload(async_cleanup)
 
+        # Return True to indicate successful setup
         return True
 
     except Exception as e:
         _LOGGER.error("Error setting up IRC integration: %s", e)
-        raise
+        return False
