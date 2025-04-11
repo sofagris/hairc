@@ -258,7 +258,7 @@ class IRCSensor(SensorEntity):
         """Send a message to IRC."""
         if not self._client.connected:
             _LOGGER.error("Cannot send message: Not connected to IRC server")
-            return
+        #    return
             
         try:
             target = channel or self._client._config["autojoins"][0]
