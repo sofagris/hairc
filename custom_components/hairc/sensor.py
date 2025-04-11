@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Any
 import threading
+import time
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
@@ -48,6 +49,8 @@ def start_reactor():
         _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
         _reactor_thread.start()
         _LOGGER.debug("Started Twisted reactor thread")
+        # Wait a moment to ensure reactor is running
+        time.sleep(1)
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -293,9 +296,9 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
-        # Start the Twisted reactor
+        # Start the Twisted reactor and wait for it
         start_reactor()
-        await asyncio.sleep(1)  # Wait for reactor to start
+        await asyncio.sleep(2)  # Give more time for reactor to start
 
         # Create factory and sensor
         factory = IRCClientFactory(config, hass)
@@ -323,6 +326,7 @@ async def async_setup_entry(
                 _LOGGER.error("Error connecting to IRC server: %s", e)
 
         reactor.callFromThread(connect)
+        await asyncio.sleep(1)  # Wait for connection attempt
 
         # Register service
         async def handle_send_message(call: ServiceCall) -> None:
