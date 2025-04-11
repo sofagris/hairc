@@ -93,22 +93,12 @@ class IRCClient(irc.IRCClient):
         channel = self._config["autojoins"][0]
         self.join(channel)
 
-    def alterCollidedNick(self, nickname):
-        """Generate an alternative nickname when there's a collision."""
-        self._nick_attempts += 1
-        if self._nick_attempts > 5:  # Maksimalt antall forsøk
-            _LOGGER.error("Too many nick collisions, giving up")
-            return None
-        new_nick = f"{nickname}_{self._nick_attempts}"
-        _LOGGER.debug("Nick collision, trying: %s", new_nick)
-        return new_nick
-
     def signedOn(self):
         """Handle successful connection."""
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
-            self._nick_attempts = 0  # Reset nick attempts on successful signon
+            self._nick_attempts = 0
             self._reconnecting = False
             self.hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
@@ -122,15 +112,13 @@ class IRCClient(irc.IRCClient):
         try:
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
-            self._nick_attempts = 0  # Reset nick attempts on disconnect
-            
-            if not self._reconnecting:
-                self._reconnecting = True
-                self.hass.bus.fire(f"{DOMAIN}_disconnected")
-                # Try to reconnect
-                factory = self.factory
-                if factory and hasattr(factory, 'clientConnectionLost'):
-                    factory.clientConnectionLost(None, reason)
+            self._nick_attempts = 0
+            self._reconnecting = True
+            self.hass.bus.fire(f"{DOMAIN}_disconnected")
+            # Try to reconnect
+            factory = self.factory
+            if factory and hasattr(factory, 'clientConnectionLost'):
+                factory.clientConnectionLost(None, reason)
         except Exception as e:
             _LOGGER.error("Error in connectionLost: %s", e)
 
@@ -171,10 +159,6 @@ class IRCClient(irc.IRCClient):
     def send_message(self, message: str, channel: str = None) -> None:
         """Send a message to IRC."""
         try:
-            if not self.transport:
-                _LOGGER.error("Cannot send message: No transport available")
-                return
-                
             target = channel or self._config["autojoins"][0]
             reactor.callFromThread(self.msg, target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
