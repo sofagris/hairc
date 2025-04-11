@@ -269,7 +269,7 @@ class IRCSensor(SensorEntity):
             
         try:
             target = channel or self._factory._current_protocol._config["autojoins"][0]
-            self._factory._current_protocol.msg(target, message)
+            self._factory._current_protocol.send_message(message, target)
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
