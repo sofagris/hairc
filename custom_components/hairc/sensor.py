@@ -206,13 +206,12 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
 class IRCSensor(SensorEntity):
     """Representation of an IRC sensor."""
 
-    def __init__(self, client: IRCClient, name: str) -> None:
+    def __init__(self, factory: IRCClientFactory, name: str) -> None:
         """Initialize the sensor."""
-        self._client = client
+        self._factory = factory
         self._name = name
         self._state = "disconnected"
         self._messages = []
-        self._factory = None
         _LOGGER.debug("IRC sensor initialized with name: %s", name)
 
     @property
@@ -223,14 +222,18 @@ class IRCSensor(SensorEntity):
     @property
     def state(self) -> str:
         """Return the state of the sensor."""
-        return "connected" if self._client.connected else "disconnected"
+        if not self._factory._current_protocol:
+            return "disconnected"
+        return "connected" if self._factory._current_protocol.connected else "disconnected"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
+        if not self._factory._current_protocol:
+            return {"messages": [], "connected": False}
         return {
-            "messages": self._client.messages[-10:],  # Last 10 messages
-            "connected": self._client.connected,
+            "messages": self._factory._current_protocol.messages[-10:],
+            "connected": self._factory._current_protocol.connected,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -252,17 +255,21 @@ class IRCSensor(SensorEntity):
 
     async def async_update(self) -> None:
         """Update the sensor state."""
-        self._state = "connected" if self._client.connected else "disconnected"
+        self._state = "connected" if self._factory._current_protocol.connected else "disconnected"
 
     async def async_send_message(self, message: str, channel: str = None) -> None:
         """Send a message to IRC."""
-        if not self._client.connected:
+        if not self._factory._current_protocol:
+            _LOGGER.error("Cannot send message: No protocol available")
+            return
+            
+        if not self._factory._current_protocol.connected:
             _LOGGER.error("Cannot send message: Not connected to IRC server")
-        #    return
+            return
             
         try:
-            target = channel or self._client._config["autojoins"][0]
-            self._client.msg(target, message)
+            target = channel or self._factory._current_protocol._config["autojoins"][0]
+            self._factory._current_protocol.msg(target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
@@ -291,28 +298,34 @@ async def async_setup_entry(
         # Wait a moment for the reactor to start
         await asyncio.sleep(1)
 
+        # Create the factory first
         factory = IRCClientFactory(config, hass)
-        client = factory.buildProtocol(None)
-        sensor = IRCSensor(client, entry.title)
+        
+        # Create the sensor with the factory
+        sensor = IRCSensor(factory, entry.title)
         async_add_entities([sensor])
 
         # Connect to the IRC server
-        if config["ssl"]:
-            options = CertificateOptions(verify=False)
-            reactor.callFromThread(
-                reactor.connectSSL,
-                config["host"],
-                config["port"],
-                factory,
-                options
-            )
-        else:
-            reactor.callFromThread(
-                reactor.connectTCP,
-                config["host"],
-                config["port"],
-                factory
-            )
+        def connect():
+            try:
+                if config["ssl"]:
+                    options = CertificateOptions(verify=False)
+                    reactor.connectSSL(
+                        config["host"],
+                        config["port"],
+                        factory,
+                        options
+                    )
+                else:
+                    reactor.connectTCP(
+                        config["host"],
+                        config["port"],
+                        factory
+                    )
+            except Exception as e:
+                _LOGGER.error("Error connecting to IRC server: %s", e)
+
+        reactor.callFromThread(connect)
 
         # Register service
         async def async_handle_send_message(call: ServiceCall) -> None:
