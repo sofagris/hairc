@@ -23,8 +23,9 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
 
-# Global reactor thread
+# Global reactor thread and event
 _reactor_thread = None
+_reactor_ready = asyncio.Event()
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
@@ -44,11 +45,14 @@ async def start_reactor():
                     reactor.run(installSignalHandlers=False)
             except Exception as e:
                 _LOGGER.error("Error in Twisted reactor: %s", e)
+            finally:
+                _reactor_ready.set()
 
         _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
         _reactor_thread.start()
         _LOGGER.debug("Started Twisted reactor thread")
-        await asyncio.sleep(1)  # Wait for reactor to start
+        await _reactor_ready.wait()
+        _LOGGER.debug("Twisted reactor is ready")
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -296,7 +300,6 @@ async def async_setup_entry(
 
         # Start the Twisted reactor and wait for it
         await start_reactor()
-        await asyncio.sleep(2)  # Give more time for reactor to start
 
         # Create factory and sensor
         factory = IRCClientFactory(config, hass)
@@ -324,7 +327,6 @@ async def async_setup_entry(
                 _LOGGER.error("Error connecting to IRC server: %s", e)
 
         reactor.callFromThread(connect)
-        await asyncio.sleep(1)  # Wait for connection attempt
 
         # Register service
         async def handle_send_message(call: ServiceCall) -> None:
