@@ -219,6 +219,71 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         )
 
 
+class IRCSensor(SensorEntity):
+    """Representation of an IRC sensor."""
+
+    def __init__(self, client: IRCClient, name: str) -> None:
+        """Initialize the sensor."""
+        self._client = client
+        self._name = name
+        self._state = "disconnected"
+        self._messages = []
+        self._factory = None
+        _LOGGER.debug("IRC sensor initialized with name: %s", name)
+
+    @property
+    def name(self) -> str:
+        """Return the name of the sensor."""
+        return self._name
+
+    @property
+    def state(self) -> str:
+        """Return the state of the sensor."""
+        return "connected" if self._client.connected else "disconnected"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        return {
+            "messages": self._client.messages[-10:],  # Last 10 messages
+            "connected": self._client.connected,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Set up the sensor."""
+        # Connection is already handled in async_setup_entry
+        pass
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up resources."""
+        if (self._factory and hasattr(self._factory, 'protocol') and
+                self._factory.protocol):
+            try:
+                if hasattr(self._factory.protocol, 'quit'):
+                    self._factory.protocol.quit("Shutting down")
+                else:
+                    _LOGGER.debug("Protocol does not have quit method")
+            except Exception as e:
+                _LOGGER.error("Error during shutdown: %s", e)
+
+    async def async_update(self) -> None:
+        """Update the sensor state."""
+        self._state = "connected" if self._client.connected else "disconnected"
+
+    async def async_send_message(self, message: str, channel: str = None) -> None:
+        """Send a message to IRC."""
+        if not self._client.connected:
+            _LOGGER.error("Cannot send message: Not connected to IRC server")
+            return
+            
+        try:
+            target = channel or self._client._config["autojoins"][0]
+            self._client.msg(target, message)
+            _LOGGER.debug("Sent message to %s: %s", target, message)
+        except Exception as e:
+            _LOGGER.error("Error sending message: %s", e)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -274,7 +339,7 @@ async def async_setup_entry(
                 if not message:
                     _LOGGER.error("No message provided in service call")
                     return
-                client.send_message(message, channel)
+                await sensor.async_send_message(message, channel)
             except Exception as e:
                 _LOGGER.error("Error handling send_message service: %s", e)
 
@@ -301,55 +366,3 @@ async def async_setup_entry(
     except Exception as e:
         _LOGGER.error("Error setting up IRC integration: %s", e)
         raise
-
-
-class IRCSensor(SensorEntity):
-    """Representation of an IRC sensor."""
-
-    def __init__(self, client: IRCClient, name: str) -> None:
-        """Initialize the sensor."""
-        self._client = client
-        self._name = name
-        self._state = "disconnected"
-        self._messages = []
-        self._factory = None
-        _LOGGER.debug("IRC sensor initialized with name: %s", name)
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def state(self) -> str:
-        """Return the state of the sensor."""
-        return "connected" if self._client.connected else "disconnected"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-        return {
-            "messages": self._client.messages[-10:],  # Last 10 messages
-            "connected": self._client.connected,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Set up the sensor."""
-        # Connection is already handled in async_setup_entry
-        pass
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up resources."""
-        if (self._factory and hasattr(self._factory, 'protocol') and
-                self._factory.protocol):
-            try:
-                if hasattr(self._factory.protocol, 'quit'):
-                    self._factory.protocol.quit("Shutting down")
-                else:
-                    _LOGGER.debug("Protocol does not have quit method")
-            except Exception as e:
-                _LOGGER.error("Error during shutdown: %s", e)
-
-    async def async_update(self) -> None:
-        """Update the sensor state."""
-        self._state = "connected" if self._client.connected else "disconnected"
