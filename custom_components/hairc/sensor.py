@@ -5,7 +5,6 @@ import logging
 import asyncio
 from typing import Any
 import threading
-import time
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
