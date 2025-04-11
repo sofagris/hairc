@@ -41,7 +41,9 @@ def run_reactor():
     """Run the Twisted reactor in a separate thread."""
     try:
         if not reactor.running:
+            _LOGGER.debug("Starting Twisted reactor")
             reactor.run(installSignalHandlers=False)
+            _LOGGER.debug("Twisted reactor stopped")
     except Exception as e:
         _LOGGER.error("Error in Twisted reactor: %s", e)
     finally:
@@ -57,12 +59,17 @@ async def start_reactor():
             _reactor_thread.start()
             _LOGGER.debug("Started Twisted reactor thread")
             try:
-                await asyncio.wait_for(_reactor_ready.wait(), timeout=5)
-                _reactor_started = True
-                _LOGGER.debug("Twisted reactor is ready")
-                return True
-            except asyncio.TimeoutError:
+                # Wait for reactor to start
+                for _ in range(5):  # Try 5 times with 1 second delay
+                    if reactor.running:
+                        _reactor_started = True
+                        _LOGGER.debug("Twisted reactor is ready")
+                        return True
+                    await asyncio.sleep(1)
                 _LOGGER.error("Timeout waiting for Twisted reactor to start")
+                return False
+            except Exception as e:
+                _LOGGER.error("Error starting Twisted reactor: %s", e)
                 return False
         return True
 
