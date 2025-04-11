@@ -10,6 +10,7 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
+from twisted.internet import endpoints
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -317,37 +318,33 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
-        # Start the Twisted reactor and wait for it
-        if not await start_reactor():
-            _LOGGER.error("Failed to start Twisted reactor")
-            return False
-
         # Create factory and sensor
         factory = IRCClientFactory(config, hass)
         sensor = IRCSensor(factory, entry.title)
         async_add_entities([sensor])
 
         # Connect to IRC server
-        def connect():
-            try:
-                if config["ssl"]:
-                    options = CertificateOptions(verify=False)
-                    reactor.connectSSL(
-                        config["host"],
-                        config["port"],
-                        factory,
-                        options
-                    )
-                else:
-                    reactor.connectTCP(
-                        config["host"],
-                        config["port"],
-                        factory
-                    )
-            except Exception as e:
-                _LOGGER.error("Error connecting to IRC server: %s", e)
+        if config["ssl"]:
+            endpoint = endpoints.SSL4ClientEndpoint(
+                reactor,
+                config["host"],
+                config["port"],
+                CertificateOptions(verify=False)
+            )
+        else:
+            endpoint = endpoints.TCP4ClientEndpoint(
+                reactor,
+                config["host"],
+                config["port"]
+            )
 
-        reactor.callFromThread(connect)
+        # Connect using endpoint
+        try:
+            await endpoints.connectProtocol(endpoint, factory.buildProtocol(None))
+            _LOGGER.debug("Connected to IRC server")
+        except Exception as e:
+            _LOGGER.error("Failed to connect to IRC server: %s", e)
+            return False
 
         # Register service
         async def handle_send_message(call: ServiceCall) -> None:
@@ -372,7 +369,7 @@ async def async_setup_entry(
         async def cleanup():
             try:
                 if reactor.running:
-                    reactor.callFromThread(reactor.stop)
+                    reactor.stop()
             except Exception as e:
                 _LOGGER.error("Error during cleanup: %s", e)
 
