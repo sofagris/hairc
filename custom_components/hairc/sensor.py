@@ -53,8 +53,14 @@ async def start_reactor():
             _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
             _reactor_thread.start()
             _LOGGER.debug("Started Twisted reactor thread")
-            await _reactor_ready.wait()
-            _LOGGER.debug("Twisted reactor is ready")
+            try:
+                await asyncio.wait_for(_reactor_ready.wait(), timeout=10)
+                _LOGGER.debug("Twisted reactor is ready")
+            except asyncio.TimeoutError:
+                _LOGGER.error("Timeout waiting for Twisted reactor to start")
+                return False
+            return True
+        return True
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -301,7 +307,9 @@ async def async_setup_entry(
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
         # Start the Twisted reactor and wait for it
-        await start_reactor()
+        if not await start_reactor():
+            _LOGGER.error("Failed to start Twisted reactor")
+            return False
 
         # Create factory and sensor
         factory = IRCClientFactory(config, hass)
