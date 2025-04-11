@@ -26,6 +26,7 @@ MAX_MESSAGES = 100  # Maximum number of messages to store
 # Global reactor thread and event
 _reactor_thread = None
 _reactor_ready = asyncio.Event()
+_reactor_lock = threading.Lock()
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
@@ -38,21 +39,22 @@ SERVICE_SCHEMA = vol.Schema({
 async def start_reactor():
     """Start the Twisted reactor in a separate thread."""
     global _reactor_thread
-    if _reactor_thread is None or not _reactor_thread.is_alive():
-        def run_reactor():
-            try:
-                if not reactor.running:
-                    reactor.run(installSignalHandlers=False)
-            except Exception as e:
-                _LOGGER.error("Error in Twisted reactor: %s", e)
-            finally:
-                _reactor_ready.set()
+    with _reactor_lock:
+        if _reactor_thread is None or not _reactor_thread.is_alive():
+            def run_reactor():
+                try:
+                    if not reactor.running:
+                        reactor.run(installSignalHandlers=False)
+                except Exception as e:
+                    _LOGGER.error("Error in Twisted reactor: %s", e)
+                finally:
+                    _reactor_ready.set()
 
-        _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
-        _reactor_thread.start()
-        _LOGGER.debug("Started Twisted reactor thread")
-        await _reactor_ready.wait()
-        _LOGGER.debug("Twisted reactor is ready")
+            _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
+            _reactor_thread.start()
+            _LOGGER.debug("Started Twisted reactor thread")
+            await _reactor_ready.wait()
+            _LOGGER.debug("Twisted reactor is ready")
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
