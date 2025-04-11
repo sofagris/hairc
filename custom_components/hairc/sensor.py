@@ -25,6 +25,9 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
 
+# Global reactor thread
+_reactor_thread = None
+
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_SCHEMA = vol.Schema({
