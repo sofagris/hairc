@@ -1,0 +1,9 @@
+send_message:
+  name: Send IRC message
+  description: Send a message to the configured IRC channel
+  fields:
+    message:
+      name: Message
+      description: The message to send
+      required: true
+      example: "Hello from Home Assistant!" 

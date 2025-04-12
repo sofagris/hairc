@@ -10,8 +10,6 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 from twisted.internet.ssl import CertificateOptions
 from twisted.internet._sslverify import ClientTLSOptions
-from twisted.internet import endpoints
-from twisted.internet.task import react
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -22,11 +20,11 @@ import voluptuous as vol
 
 from .const import DOMAIN
 
-# Global reactor thread
-_reactor_thread = None
-
 _LOGGER = logging.getLogger(__name__)
 MAX_MESSAGES = 100  # Maximum number of messages to store
+
+# Global reactor thread
+_reactor_thread = None
 
 # Service schema
 SERVICE_SEND_MESSAGE = "send_message"
@@ -36,27 +34,20 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 
-def run_reactor():
-    """Run the Twisted reactor in a separate thread."""
-    try:
-        if not reactor.running:
-            _LOGGER.debug("Starting Twisted reactor")
-            reactor.run(installSignalHandlers=False)
-            _LOGGER.debug("Twisted reactor stopped")
-    except Exception as e:
-        _LOGGER.error("Error in Twisted reactor: %s", e)
-
-
-async def start_reactor():
+def start_reactor():
     """Start the Twisted reactor in a separate thread."""
     global _reactor_thread
     if _reactor_thread is None or not _reactor_thread.is_alive():
+        def run_reactor():
+            try:
+                if not reactor.running:
+                    reactor.run(installSignalHandlers=False)
+            except Exception as e:
+                _LOGGER.error("Error in Twisted reactor: %s", e)
+
         _reactor_thread = threading.Thread(target=run_reactor, daemon=True)
         _reactor_thread.start()
         _LOGGER.debug("Started Twisted reactor thread")
-        await asyncio.sleep(1)  # Wait for reactor to start
-        return True
-    return True
 
 
 class CustomClientTLSOptions(ClientTLSOptions):
@@ -80,7 +71,7 @@ class IRCClient(irc.IRCClient):
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
-        # Add supported attribute with default values
+        # Add the supported attribute used by Twisted to compute maximum line length.
         self.supported = type('Supported', (), {
             'getFeature': lambda self, feature: {
                 'NICKLEN': 30,
@@ -95,19 +86,23 @@ class IRCClient(irc.IRCClient):
         """Called when a connection is made."""
         _LOGGER.debug("Connection made to IRC server")
         super().connectionMade()
-        self.connected = True
-        self._nick_attempts = 0
-        if hasattr(self.hass, 'bus'):
-            self.hass.bus.fire(f"{DOMAIN}_connected")
-        channel = self._config["autojoins"][0]
-        self.join(channel)
+
+    def alterCollidedNick(self, nickname):
+        """Generate an alternative nickname when there's a collision."""
+        self._nick_attempts += 1
+        if self._nick_attempts > 5:  # Maksimalt antall forsøk
+            _LOGGER.error("Too many nick collisions, giving up")
+            return None
+        new_nick = f"{nickname}_{self._nick_attempts}"
+        _LOGGER.debug("Nick collision, trying: %s", new_nick)
+        return new_nick
 
     def signedOn(self):
         """Handle successful connection."""
         try:
             _LOGGER.info("Successfully signed on to IRC server")
             self.connected = True
-            self._nick_attempts = 0
+            self._nick_attempts = 0  # Reset nick attempts on successful signon
             self._reconnecting = False
             self.hass.bus.fire(f"{DOMAIN}_connected")
             channel = self._config["autojoins"][0]
@@ -121,18 +116,22 @@ class IRCClient(irc.IRCClient):
         try:
             _LOGGER.warning("Lost connection to IRC server: %s", reason)
             self.connected = False
-            self._nick_attempts = 0
-            self._reconnecting = True
-            self.hass.bus.fire(f"{DOMAIN}_disconnected")
-            # Try to reconnect
-            factory = self.factory
-            if factory and hasattr(factory, 'clientConnectionLost'):
-                factory.clientConnectionLost(None, reason)
+            self._nick_attempts = 0  # Reset nick attempts on disconnect
+
+            if not self._reconnecting:
+                self._reconnecting = True
+                self.hass.bus.fire(f"{DOMAIN}_disconnected")
+                # Try to reconnect
+                factory = self.factory
+                if factory and hasattr(factory, 'clientConnectionLost'):
+                    factory.clientConnectionLost(None, reason)
         except Exception as e:
             _LOGGER.error("Error in connectionLost: %s", e)
 
     def privmsg(self, user, channel, message):
         """Handle incoming messages."""
+        _LOGGER.debug("IRCClient.send_message called from thread: %s", threading.current_thread().name)
+        _LOGGER.debug("Got message : %s", message)
         try:
             # Handle ping/pong for test purposes
             if message.lower() == "ping":
@@ -169,7 +168,8 @@ class IRCClient(irc.IRCClient):
         """Send a message to IRC."""
         try:
             target = channel or self._config["autojoins"][0]
-            reactor.callFromThread(self.msg, target, message)
+            _LOGGER.debug("IRCClient.send_message called from thread: %s", threading.current_thread().name)
+            self.msg(target, message)
             _LOGGER.debug("Sent message to %s: %s", target, message)
         except Exception as e:
             _LOGGER.error("Error sending message: %s", e)
@@ -212,103 +212,14 @@ class IRCClientFactory(protocol.ReconnectingClientFactory):
         )
 
 
-class IRCSensor(SensorEntity):
-    """Representation of an IRC sensor."""
-
-    def __init__(self, factory: IRCClientFactory, name: str) -> None:
-        """Initialize the sensor."""
-        self._factory = factory
-        self._name = name
-        self._state = "disconnected"
-        self._messages = []
-        _LOGGER.debug("IRC sensor initialized with name: %s", name)
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def state(self) -> str:
-        """Return the state of the sensor."""
-        if not self._factory._current_protocol:
-            return "disconnected"
-        return "connected" if self._factory._current_protocol.connected else "disconnected"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-        if not self._factory._current_protocol:
-            return {"messages": [], "connected": False}
-        return {
-            "messages": self._factory._current_protocol.messages[-10:],
-            "connected": self._factory._current_protocol.connected,
-        }
-
-    async def async_added_to_hass(self) -> None:
-        """Set up the sensor."""
-        # Connection is already handled in async_setup_entry
-        pass
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Clean up resources."""
-        if (self._factory and hasattr(self._factory, 'protocol') and
-                self._factory.protocol):
-            try:
-                if hasattr(self._factory.protocol, 'quit'):
-                    self._factory.protocol.quit("Shutting down")
-                else:
-                    _LOGGER.debug("Protocol does not have quit method")
-            except Exception as e:
-                _LOGGER.error("Error during shutdown: %s", e)
-
-    async def async_update(self) -> None:
-        """Update the sensor state."""
-        self._state = "connected" if self._factory._current_protocol.connected else "disconnected"
-
-    async def async_send_message(self, message: str, channel: str = None) -> None:
-        """Send a message to IRC."""
-        if not self._factory._current_protocol:
-            _LOGGER.error("Cannot send message: No protocol available")
-            return
-            
-        if not self._factory._current_protocol.connected:
-            _LOGGER.error("Cannot send message: Not connected to IRC server")
-            return
-            
-        try:
-            target = channel or self._factory._current_protocol._config["autojoins"][0]
-            self._factory._current_protocol.send_message(message, target)
-            _LOGGER.debug("Sent message to %s: %s", target, message)
-        except Exception as e:
-            _LOGGER.error("Error sending message: %s", e)
-
-
-def deferred_to_future(deferred):
-    """Convert a Deferred to a Future."""
-    loop = asyncio.get_event_loop()
-    future = loop.create_future()
-
-    def callback(result):
-        if not future.done():
-            future.set_result(result)
-
-    def errback(failure):
-        if not future.done():
-            future.set_exception(failure.value)
-
-    deferred.addCallbacks(callback, errback)
-    return future
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-) -> None:
+) -> bool:
     """Set up the IRC sensor from a config entry."""
     try:
-        # Get configuration
+        # Build up the configuration
         config = {
             "host": entry.data["server"],
             "port": entry.data["port"],
@@ -319,69 +230,145 @@ async def async_setup_entry(
         }
         _LOGGER.debug("Setting up IRC integration with config: %s", config)
 
-        # Start the Twisted reactor
-        if not await start_reactor():
-            _LOGGER.error("Failed to start Twisted reactor")
-            return False
+        # Start Twisted-reactoren (in a separate thread) if it's not already running
+        start_reactor()
+        await asyncio.sleep(1)
 
-        # Create factory and sensor
+        # Create IRCClientFactory and store it in hass.data so it's available for service callback
         factory = IRCClientFactory(config, hass)
+        hass.data.setdefault(DOMAIN, {})["factory"] = factory
+
+        # Create IRCSensor and pass in factory – sensor gets connection status and messages from factory._current_protocol
         sensor = IRCSensor(factory, entry.title)
         async_add_entities([sensor])
+        _LOGGER.debug("Sensor entity added.")
 
-        # Connect to IRC server
+        # Let the reactor create the active connection (we call connect via reactor.callFromThread)
         def connect():
+            _LOGGER.debug("Inside connect() function.")
             try:
                 if config["ssl"]:
                     options = CertificateOptions(verify=False)
-                    reactor.connectSSL(
-                        config["host"],
-                        config["port"],
-                        factory,
-                        options
-                    )
+                    reactor.connectSSL(config["host"], config["port"], factory, options)
                 else:
-                    reactor.connectTCP(
-                        config["host"],
-                        config["port"],
-                        factory
-                    )
-            except Exception as e:
-                _LOGGER.error("Error connecting to IRC server: %s", e)
-
+                    reactor.connectTCP(config["host"], config["port"], factory)
+                _LOGGER.debug("connect() executed successfully.")
+            except Exception:
+                _LOGGER.exception("Error connecting to IRC server")
         reactor.callFromThread(connect)
+        _LOGGER.debug("Connect() scheduled; waiting briefly...")
+        await asyncio.sleep(0.5)
 
-        # Register service
-        async def handle_send_message(call: ServiceCall) -> None:
-            """Handle the send_message service call."""
+        # Register the service with a direct async callback that gets the active protocol from factory
+        async def async_handle_send_message(call: ServiceCall) -> None:
             try:
                 message = call.data.get("message")
+                channel = call.data.get("channel")
+                if channel is None:
+                    # Get default channel from config and check if channel name starts with #
+                    channel = config["autojoins"][0]
+                    if not channel.startswith("#"):
+                        channel = "#" + channel
                 if not message:
                     _LOGGER.error("No message provided in service call")
                     return
-                await sensor.async_send_message(message)
-            except Exception as e:
-                _LOGGER.error("Error handling send_message service: %s", e)
+                # Get factory from hass.data
+                current_factory = hass.data.get(DOMAIN, {}).get("factory")
+                if not current_factory or not current_factory._current_protocol:
+                    _LOGGER.error("No active IRC protocol available for sending message")
+                    return
+                if not current_factory._current_protocol.connected:
+                    _LOGGER.error("The active IRC protocol is not connected")
+                    return
+                _LOGGER.debug("Sending message from thread: %s",
+                            threading.current_thread().name)
+                _LOGGER.debug("Sending message: %s to channel: %s", message, channel)
+                # Ensure the message is sent via the reactor's thread
+                reactor.callFromThread(
+                    current_factory._current_protocol.send_message,
+                    message,
+                    channel
+                )
+                _LOGGER.debug("Scheduled sending message: %s", message)
+            except Exception:
+                _LOGGER.exception("Error handling send_message service")
 
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_SEND_MESSAGE,
-            handle_send_message,
-            schema=SERVICE_SCHEMA
-        )
+        hass.services.async_register(DOMAIN, SERVICE_SEND_MESSAGE, async_handle_send_message, schema=SERVICE_SCHEMA)
+        _LOGGER.debug("Service %s registered under domain %s", SERVICE_SEND_MESSAGE, DOMAIN)
 
-        # Register cleanup
-        async def cleanup():
+        # Register a cleanup callback – here we disconnect the active connection,
+        # but we do NOT stop the reactor (since it's shared by HA)
+        def cleanup():
+            _LOGGER.debug("Running cleanup callback.")
             try:
-                if reactor.running:
-                    reactor.callFromThread(reactor.stop)
-            except Exception as e:
-                _LOGGER.error("Error during cleanup: %s", e)
-
+                if factory._current_protocol and factory._current_protocol.connected:
+                    _LOGGER.debug("Disconnecting IRC client in cleanup.")
+                    reactor.callFromThread(factory._current_protocol.transport.loseConnection)
+            except Exception:
+                _LOGGER.exception("Error during cleanup")
         entry.async_on_unload(cleanup)
 
+        _LOGGER.debug("async_setup_entry completed successfully")
         return True
 
-    except Exception as e:
-        _LOGGER.error("Error setting up IRC integration: %s", e)
+    except Exception:
+        _LOGGER.exception("Error setting up IRC integration")
         return False
+
+
+class IRCSensor(SensorEntity):
+    """Representation of an IRC sensor."""
+
+    def __init__(self, factory: IRCClientFactory, name: str) -> None:
+        """Initialize the sensor."""
+        self._factory = factory
+        self._name = name
+        _LOGGER.debug("IRC sensor initialized with name: %s", name)
+
+    @property
+    def name(self) -> str:
+        """Return the sensor's name."""
+        return self._name
+
+    @property
+    def state(self) -> str:
+        """Return the current connection state."""
+        if not self._factory._current_protocol:
+            return "disconnected"
+        return "connected" if self._factory._current_protocol.connected else "disconnected"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes, like recent messages."""
+        if not self._factory._current_protocol:
+            return {"messages": [], "connected": False}
+        return {
+            "messages": self._factory._current_protocol.messages[-10:],
+            "connected": self._factory._current_protocol.connected,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Called when the sensor is added to Home Assistant."""
+        _LOGGER.debug("IRCSensor added to HA.")
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up resources when the sensor is removed.
+
+        Disconnect the IRC client's transport.
+        """
+        _LOGGER.debug("IRCSensor is being removed; running cleanup.")
+        if self._factory and hasattr(self._factory, '_current_protocol'):
+            try:
+                protocol_instance = self._factory._current_protocol
+                if protocol_instance and protocol_instance.connected:
+                    _LOGGER.debug("Disconnecting IRC client during cleanup.")
+                    reactor.callFromThread(protocol_instance.transport.loseConnection)
+            except Exception:
+                _LOGGER.exception("Error during cleanup")
+
+    async def async_update(self) -> None:
+        """Update the sensor state."""
+        if self._factory._current_protocol:
+            self._state = "connected" if self._factory._current_protocol.connected else "disconnected"
+        else:
+            self._state = "disconnected"
