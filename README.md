@@ -1,31 +1,66 @@
 # Home Assistant IRC Integration
 
-A Home Assistant integration that allows you to connect to IRC servers and automate actions based on IRC messages.
+This integration allows Home Assistant to connect to an IRC server, enabling bidirectional communication between IRC and Home Assistant.
+
+## Features
+
+- Connect to IRC servers (with or without SSL)
+- Send and receive messages
+- Trigger automations based on IRC messages
+- Send messages to IRC from Home Assistant
+- Automatic reconnection on connection loss
 
 ## Installation
 
-1. Copy this folder to `custom_components/hairc` in your Home Assistant installation
+### Via HACS (Recommended)
+
+1. Open HACS in your Home Assistant instance
+2. Go to the "Integrations" section
+3. Click the three dots in the top right corner and select "Custom repositories"
+4. Add this repository: `https://github.com/yourusername/hairc`
+5. Click "Add"
+6. Search for "IRC" in the HACS store
+7. Click "Install" on the "Home Assistant IRC" integration
+8. Restart Home Assistant
+
+### Manual Installation
+
+1. Copy the `hairc` directory to your `custom_components` directory in Home Assistant
 2. Restart Home Assistant
-3. Go to Integrations and add "IRC" from the user interface
 
 ## Configuration
 
-Configure the integration through the user interface or `configuration.yaml`:
+Add the following to your `configuration.yaml`:
 
 ```yaml
 # Example configuration
 hairc:
-  server: irc.oftc.net
-  port: 6667
-  nickname: mybot
-  channel: "#mychannel"
-  ssl: false
-  password: null  # Optional
+  server: irc.example.com
+  port: 6697
+  nickname: yourbot
+  channel: "#yourchannel"
+  ssl: true
+  password: yourpassword  # Optional
 ```
 
 ## Automation Examples
 
-### Sending Messages to IRC
+### Sending Messages
+
+You can send messages to IRC using the `hairc.send_message` service:
+
+```yaml
+# Send a message when bot joins channel
+alias: "IRC Welcome Message"
+trigger:
+  platform: event
+  event_type: hairc_connected
+action:
+  service: hairc.send_message
+  data:
+    message: "Home Assistant at your service. Type !help for list of commands"
+```	
+
 
 ```yaml
 # Example automation for sending messages
@@ -42,7 +77,9 @@ automation:
         channel: "#mychannel"  # Optional, uses default channel if not specified
 ```
 
-### Reacting to IRC Messages
+### Receiving Messages
+
+IRC messages trigger the `hairc_message` event. You can create automations based on these events:
 
 ```yaml
 # Example automation for reacting to IRC messages
@@ -139,7 +176,7 @@ The IRC sensor has the following attributes:
 
 ## Troubleshooting
 
-If you experience connection issues:
+If you encounter issues:
 
 1. Verify the server address and port are correct
 2. Try with `ssl: false` if you have SSL issues
