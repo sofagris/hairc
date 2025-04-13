@@ -1,81 +1,102 @@
-# IRC Home Assistant Integration
+# Home Assistant IRC Integration
 
-En Home Assistant-integration som låter dig ansluta till IRC-servrar och kanaler för att kommunicera med din Home Assistant-instans.
+Denna integration låter Home Assistant ansluta till en IRC-server och möjliggör tvåvägskommunikation mellan IRC och Home Assistant.
 
 ## Funktioner
 
-- Ansluta till IRC-servrar
-- Delta i IRC-kanaler
-- Stöd för SSL-kryptering
-- Stöd för serverlösenord
-- Loggning av inkommande meddelanden
-- GUI-konfiguration
+- Ansluta till IRC-servrar (med eller utan SSL)
+- Skicka och ta emot meddelanden
+- Utlösa automatiseringar baserat på IRC-meddelanden
+- Skicka meddelanden till IRC från Home Assistant
+- Automatisk återanslutning vid förlust av anslutning
 
 ## Installation
 
-### HACS-installation (Rekommenderas)
+### Via HACS (Rekommenderas)
 
 1. Öppna HACS i din Home Assistant-instans
 2. Gå till "Integrationer"-sektionen
-3. Klicka på de tre punkterna i övre högra hörnet
-4. Välj "Anpassade förråd"
-5. Lägg till detta förråd:
-   - Förråd: `yourusername/hairc`
-   - Kategori: Integration
-6. Klicka "Lägg till"
-7. Hitta "IRC Home Assistant Integration" i listan
-8. Klicka "Installera"
-9. Starta om Home Assistant
+3. Klicka på de tre punkterna i övre högra hörnet och välj "Anpassade förråd"
+4. Lägg till detta förråd: `https://github.com/sofagris/hairc`
+5. Klicka "Lägg till"
+6. Sök efter "IRC" i HACS-butiken
+7. Klicka "Installera" på "Home Assistant IRC"-integrationen
+8. Starta om Home Assistant
 
-### Manuell installation
+### Manuell Installation
 
-1. Kopiera mappen `custom_components/hairc` till din Home Assistant `custom_components`-mapp
+1. Kopiera `hairc`-katalogen till din `custom_components`-katalog i Home Assistant
 2. Starta om Home Assistant
-3. Gå till Integrationer i Home Assistant GUI
-4. Klicka på "+ Lägg till integration"
-5. Sök efter "IRC Home Assistant Integration"
-6. Fyll i följande fält:
-   - Server (IRC-servern du vill ansluta till)
-   - Port (standard 6667)
-   - Nickname (botens användarnamn)
-   - Channel (kanalen du vill gå med i)
-   - Password (valfritt, om servern kräver det)
-   - SSL (om du vill använda säker anslutning)
 
 ## Konfiguration
 
-### YAML-konfiguration (valfritt)
+Lägg till följande i din `configuration.yaml`:
 
 ```yaml
-# configuration.yaml
 hairc:
   server: irc.example.com
-  port: 6667
-  nickname: homeassistant
-  channel: "#homeassistant"
-  password: !secret irc_password
-  ssl: false
+  port: 6697
+  nickname: dinbot
+  channel: "#dinkanal"
+  ssl: true
+  password: dittlösenord  # Valfritt
+```
+
+## Användning
+
+### Skicka Meddelanden
+
+Du kan skicka meddelanden till IRC genom att använda `hairc.send_message`-tjänsten:
+
+```yaml
+service: hairc.send_message
+data:
+  message: "Hej från Home Assistant!"
+  channel: "#dinkanal"  # Valfritt, använder standardkanal om inte angiven
+```
+
+### Ta Emot Meddelanden
+
+IRC-meddelanden utlöser `hairc_message`-händelsen. Du kan skapa automatiseringar baserade på dessa händelser:
+
+```yaml
+alias: "Svara på IRC ping"
+trigger:
+  platform: event
+  event_type: hairc_message
+  event_data:
+    message: "ping"
+    type: public
+action:
+  service: hairc.send_message
+  data:
+    message: "pong"
+```
+
+### Välkomstmeddelande
+
+För att få boten att skicka ett välkomstmeddelande när den ansluter till en kanal, lägg till denna automatisering:
+
+```yaml
+alias: "IRC Välkomstmeddelande"
+trigger:
+  platform: event
+  event_type: hairc_connected
+action:
+  service: hairc.send_message
+  data:
+    message: "Home Assistant till din tjänst. Skriv !help för lista över kommandon"
 ```
 
 ## Felsökning
 
-Om du upplever anslutningsproblem:
+Om du upplever problem:
 
-1. Kontrollera att serveradressen är korrekt
-2. Bekräfta att porten är korrekt
-3. Verifiera att nicknamnet är tillgängligt
-4. Kontrollera om kanalen existerar
-5. Leta efter felmeddelanden i Home Assistant-loggen
-
-## Bidra
-
-Bidrag är välkomna! Följ dessa steg:
-
-1. Forka projektet
-2. Skapa en ny branch
-3. Gör dina ändringar
-4. Skicka en pull request
+1. Kontrollera Home Assistant-loggarna för felmeddelanden
+2. Verifiera dina IRC-serverinställningar
+3. Se till att din brandvägg tillåter utgående anslutningar till IRC-servern
+4. Kontrollera att boten har tillstånd att gå med i kanalen
 
 ## Licens
 
-Detta projekt är licensierat under MIT-licensen - se [LICENSE](LICENSE) filen för detaljer. 
+Detta projekt är licensierat under MIT-licensen - se LICENSE-filen för detaljer. 

@@ -1,81 +1,102 @@
-# IRC Home Assistant 集成
+# Home Assistant IRC 集成
 
-一个 Home Assistant 集成，允许您连接到 IRC 服务器和频道，与您的 Home Assistant 实例进行通信。
+此集成允许 Home Assistant 连接到 IRC 服务器，实现 IRC 和 Home Assistant 之间的双向通信。
 
 ## 功能
 
-- 连接到 IRC 服务器
-- 加入 IRC 频道
-- 支持 SSL 加密
-- 支持服务器密码
-- 记录传入消息
-- 图形界面配置
+- 连接到 IRC 服务器（支持 SSL）
+- 发送和接收消息
+- 基于 IRC 消息触发自动化
+- 从 Home Assistant 发送消息到 IRC
+- 连接断开时自动重连
 
 ## 安装
 
-### HACS 安装（推荐）
+### 通过 HACS（推荐）
 
-1. 在您的 Home Assistant 实例中打开 HACS
+1. 在 Home Assistant 实例中打开 HACS
 2. 转到"集成"部分
-3. 点击右上角的三个点
-4. 选择"自定义存储库"
-5. 添加此存储库：
-   - 存储库：`yourusername/hairc`
-   - 类别：集成
-6. 点击"添加"
-7. 在列表中找到"IRC Home Assistant Integration"
-8. 点击"安装"
-9. 重启 Home Assistant
+3. 点击右上角的三点菜单，选择"自定义存储库"
+4. 添加此存储库：`https://github.com/sofagris/hairc`
+5. 点击"添加"
+6. 在 HACS 商店中搜索"IRC"
+7. 点击"Home Assistant IRC"集成的"安装"
+8. 重启 Home Assistant
 
 ### 手动安装
 
-1. 将 `custom_components/hairc` 文件夹复制到您的 Home Assistant `custom_components` 文件夹
+1. 将 `hairc` 目录复制到 Home Assistant 的 `custom_components` 目录
 2. 重启 Home Assistant
-3. 在 Home Assistant GUI 中转到集成
-4. 点击"+ 添加集成"
-5. 搜索"IRC Home Assistant Integration"
-6. 填写以下字段：
-   - 服务器（您要连接的 IRC 服务器）
-   - 端口（默认 6667）
-   - 昵称（机器人的用户名）
-   - 频道（您要加入的频道）
-   - 密码（可选，如果服务器需要）
-   - SSL（如果您想使用安全连接）
 
 ## 配置
 
-### YAML 配置（可选）
+在 `configuration.yaml` 中添加以下内容：
 
 ```yaml
-# configuration.yaml
 hairc:
   server: irc.example.com
-  port: 6667
-  nickname: homeassistant
-  channel: "#homeassistant"
-  password: !secret irc_password
-  ssl: false
+  port: 6697
+  nickname: 你的机器人
+  channel: "#你的频道"
+  ssl: true
+  password: 你的密码  # 可选
+```
+
+## 使用
+
+### 发送消息
+
+可以使用 `hairc.send_message` 服务向 IRC 发送消息：
+
+```yaml
+service: hairc.send_message
+data:
+  message: "来自 Home Assistant 的消息！"
+  channel: "#你的频道"  # 可选，未指定时使用默认频道
+```
+
+### 接收消息
+
+IRC 消息会触发 `hairc_message` 事件。可以基于这些事件创建自动化：
+
+```yaml
+alias: "响应 IRC ping"
+trigger:
+  platform: event
+  event_type: hairc_message
+  event_data:
+    message: "ping"
+    type: public
+action:
+  service: hairc.send_message
+  data:
+    message: "pong"
+```
+
+### 欢迎消息
+
+要让机器人在加入频道时发送欢迎消息，添加以下自动化：
+
+```yaml
+alias: "IRC 欢迎消息"
+trigger:
+  platform: event
+  event_type: hairc_connected
+action:
+  service: hairc.send_message
+  data:
+    message: "Home Assistant 为您服务。输入 !help 查看命令列表"
 ```
 
 ## 故障排除
 
-如果您遇到连接问题：
+如果遇到问题：
 
-1. 验证服务器地址是否正确
-2. 确认端口是否正确
-3. 验证昵称是否可用
-4. 检查频道是否存在
-5. 在 Home Assistant 日志中查找错误消息
-
-## 贡献
-
-欢迎贡献！请按照以下步骤操作：
-
-1. Fork 项目
-2. 创建新分支
-3. 进行更改
-4. 提交拉取请求
+1. 检查 Home Assistant 日志中的错误消息
+2. 验证 IRC 服务器设置
+3. 确保防火墙允许到 IRC 服务器的出站连接
+4. 检查机器人是否有加入频道的权限
 
 ## 许可证
 
-本项目采用 MIT 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。 
+本项目采用 MIT 许可证 - 详情请参阅 LICENSE 文件。 

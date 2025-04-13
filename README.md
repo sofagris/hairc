@@ -17,7 +17,7 @@ This integration allows Home Assistant to connect to an IRC server, enabling bid
 1. Open HACS in your Home Assistant instance
 2. Go to the "Integrations" section
 3. Click the three dots in the top right corner and select "Custom repositories"
-4. Add this repository: `https://github.com/yourusername/hairc`
+4. Add this repository: `https://github.com/sofagris/hairc`
 5. Click "Add"
 6. Search for "IRC" in the HACS store
 7. Click "Install" on the "Home Assistant IRC" integration
@@ -51,14 +51,15 @@ You can send messages to IRC using the `hairc.send_message` service:
 
 ```yaml
 # Send a message when bot joins channel
-alias: "IRC Welcome Message"
-trigger:
-  platform: event
-  event_type: hairc_connected
-action:
-  service: hairc.send_message
-  data:
-    message: "Home Assistant at your service. Type !help for list of commands"
+automation:
+  - alias: "IRC Welcome Message"
+    trigger:
+    platform: event
+    event_type: hairc_connected
+  action:
+    service: hairc.send_message
+    data:
+      message: "Home Assistant at your service. Type !help for list of commands"
 ```	
 
 

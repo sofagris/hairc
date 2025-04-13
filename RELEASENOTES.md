@@ -1,5 +1,28 @@
 # Release Notes
 
+## v1.0.0 (2024-04-12)
+
+### Features
+- Initial release of the Home Assistant IRC integration
+- Support for connecting to IRC servers with or without SSL
+- Bidirectional communication between IRC and Home Assistant
+- Automatic reconnection on connection loss
+- Support for sending and receiving messages
+- Integration with Home Assistant automations
+- HACS installation support
+
+### Improvements
+- Robust error handling and logging
+- Thread-safe message handling
+- Automatic channel prefix handling (#)
+- Support for private messages
+- Configurable nickname and channel
+
+### Bug Fixes
+- Fixed issue with message sending when channel not specified
+- Improved connection stability
+- Fixed thread handling for reactor operations
+
 ## Version 0.1.5 (2025-04-08)
 
 ### Bug Fixes

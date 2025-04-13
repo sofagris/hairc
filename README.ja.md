@@ -1,81 +1,102 @@
-# IRC Home Assistant 統合
+# Home Assistant IRC 統合
 
-Home Assistant インスタンスと通信するために IRC サーバーとチャンネルに接続できる Home Assistant 統合です。
+この統合により、Home AssistantはIRCサーバーに接続し、IRCとHome Assistant間の双方向通信を可能にします。
 
 ## 機能
 
-- IRC サーバーへの接続
-- IRC チャンネルへの参加
-- SSL 暗号化のサポート
-- サーバーパスワードのサポート
-- 受信メッセージのログ記録
-- GUI 設定
+- IRCサーバーへの接続（SSL対応）
+- メッセージの送受信
+- IRCメッセージに基づく自動化のトリガー
+- Home AssistantからのIRCメッセージ送信
+- 接続切断時の自動再接続
 
 ## インストール
 
-### HACS インストール（推奨）
+### HACS経由（推奨）
 
-1. Home Assistant インスタンスで HACS を開く
+1. Home AssistantインスタンスでHACSを開く
 2. 「統合」セクションに移動
-3. 右上の三点をクリック
-4. 「カスタムリポジトリ」を選択
-5. このリポジトリを追加：
-   - リポジトリ：`yourusername/hairc`
-   - カテゴリ：統合
-6. 「追加」をクリック
-7. リストから「IRC Home Assistant Integration」を探す
-8. 「インストール」をクリック
-9. Home Assistant を再起動
+3. 右上の3点メニューをクリックし、「カスタムリポジトリ」を選択
+4. このリポジトリを追加: `https://github.com/sofagris/hairc`
+5. 「追加」をクリック
+6. HACSストアで「IRC」を検索
+7. 「Home Assistant IRC」統合の「インストール」をクリック
+8. Home Assistantを再起動
 
 ### 手動インストール
 
-1. `custom_components/hairc` フォルダを Home Assistant の `custom_components` フォルダにコピー
-2. Home Assistant を再起動
-3. Home Assistant GUI で統合に移動
-4. 「+ 統合を追加」をクリック
-5. 「IRC Home Assistant Integration」を検索
-6. 以下のフィールドを入力：
-   - サーバー（接続する IRC サーバー）
-   - ポート（デフォルト 6667）
-   - ニックネーム（ボットのユーザー名）
-   - チャンネル（参加するチャンネル）
-   - パスワード（オプション、サーバーで必要な場合）
-   - SSL（セキュア接続を使用する場合）
+1. `hairc`ディレクトリをHome Assistantの`custom_components`ディレクトリにコピー
+2. Home Assistantを再起動
 
 ## 設定
 
-### YAML 設定（オプション）
+`configuration.yaml`に以下を追加:
 
 ```yaml
-# configuration.yaml
 hairc:
   server: irc.example.com
-  port: 6667
-  nickname: homeassistant
-  channel: "#homeassistant"
-  password: !secret irc_password
-  ssl: false
+  port: 6697
+  nickname: あなたのボット
+  channel: "#あなたのチャンネル"
+  ssl: true
+  password: あなたのパスワード  # オプション
+```
+
+## 使用方法
+
+### メッセージの送信
+
+`hairc.send_message`サービスを使用してIRCにメッセージを送信できます:
+
+```yaml
+service: hairc.send_message
+data:
+  message: "Home Assistantからのメッセージです！"
+  channel: "#あなたのチャンネル"  # オプション、指定しない場合はデフォルトチャンネルを使用
+```
+
+### メッセージの受信
+
+IRCメッセージは`hairc_message`イベントをトリガーします。これらのイベントに基づいて自動化を作成できます:
+
+```yaml
+alias: "IRC pingへの応答"
+trigger:
+  platform: event
+  event_type: hairc_message
+  event_data:
+    message: "ping"
+    type: public
+action:
+  service: hairc.send_message
+  data:
+    message: "pong"
+```
+
+### ウェルカムメッセージ
+
+ボットがチャンネルに接続したときにウェルカムメッセージを送信するには、以下の自動化を追加します:
+
+```yaml
+alias: "IRCウェルカムメッセージ"
+trigger:
+  platform: event
+  event_type: hairc_connected
+action:
+  service: hairc.send_message
+  data:
+    message: "Home Assistantがサービスを提供します。コマンド一覧は!helpと入力してください"
 ```
 
 ## トラブルシューティング
 
-接続に問題がある場合：
+問題が発生した場合:
 
-1. サーバーアドレスが正しいことを確認
-2. ポートが正しいことを確認
-3. ニックネームが利用可能であることを確認
-4. チャンネルが存在することを確認
-5. Home Assistant ログでエラーメッセージを確認
-
-## 貢献
-
-貢献は大歓迎です！以下の手順に従ってください：
-
-1. プロジェクトをフォーク
-2. 新しいブランチを作成
-3. 変更を加える
-4. プルリクエストを送信
+1. Home Assistantのログでエラーメッセージを確認
+2. IRCサーバー設定を確認
+3. ファイアウォールがIRCサーバーへの送信接続を許可していることを確認
+4. ボットがチャンネルに参加する権限を持っていることを確認
 
 ## ライセンス
 
-このプロジェクトは MIT ライセンスの下でライセンスされています - 詳細は [LICENSE](LICENSE) ファイルを参照してください。 
+このプロジェクトはMITライセンスの下でライセンスされています - 詳細はLICENSEファイルを参照してください。 

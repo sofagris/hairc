@@ -1,81 +1,102 @@
 # Intégration IRC pour Home Assistant
 
-Une intégration Home Assistant qui vous permet de vous connecter à des serveurs et canaux IRC pour communiquer avec votre instance Home Assistant.
+Cette intégration permet à Home Assistant de se connecter à un serveur IRC et permet une communication bidirectionnelle entre IRC et Home Assistant.
 
 ## Fonctionnalités
 
-- Connexion aux serveurs IRC
-- Rejoindre des canaux IRC
-- Support du chiffrement SSL
-- Support du mot de passe serveur
-- Journalisation des messages entrants
-- Configuration via interface graphique
+- Connexion aux serveurs IRC (avec ou sans SSL)
+- Envoi et réception de messages
+- Déclenchement d'automatisations basées sur les messages IRC
+- Envoi de messages à IRC depuis Home Assistant
+- Reconnexion automatique en cas de perte de connexion
 
 ## Installation
 
-### Installation via HACS (Recommandé)
+### Via HACS (Recommandé)
 
 1. Ouvrez HACS dans votre instance Home Assistant
 2. Allez dans la section "Intégrations"
-3. Cliquez sur les trois points dans le coin supérieur droit
-4. Sélectionnez "Dépôts personnalisés"
-5. Ajoutez ce dépôt :
-   - Dépôt : `yourusername/hairc`
-   - Catégorie : Intégration
-6. Cliquez sur "Ajouter"
-7. Trouvez "IRC Home Assistant Integration" dans la liste
-8. Cliquez sur "Installer"
-9. Redémarrez Home Assistant
+3. Cliquez sur les trois points dans le coin supérieur droit et sélectionnez "Dépôts personnalisés"
+4. Ajoutez ce dépôt : `https://github.com/sofagris/hairc`
+5. Cliquez sur "Ajouter"
+6. Recherchez "IRC" dans le magasin HACS
+7. Cliquez sur "Installer" pour l'intégration "Home Assistant IRC"
+8. Redémarrez Home Assistant
 
 ### Installation manuelle
 
-1. Copiez le dossier `custom_components/hairc` dans votre dossier `custom_components` de Home Assistant
+1. Copiez le répertoire `hairc` dans votre répertoire `custom_components` de Home Assistant
 2. Redémarrez Home Assistant
-3. Allez dans Intégrations dans l'interface graphique de Home Assistant
-4. Cliquez sur "+ Ajouter une intégration"
-5. Recherchez "IRC Home Assistant Integration"
-6. Remplissez les champs suivants :
-   - Serveur (serveur IRC auquel vous souhaitez vous connecter)
-   - Port (par défaut 6667)
-   - Pseudonyme (nom d'utilisateur du bot)
-   - Canal (canal que vous souhaitez rejoindre)
-   - Mot de passe (optionnel, si requis par le serveur)
-   - SSL (si vous souhaitez utiliser une connexion sécurisée)
 
 ## Configuration
 
-### Configuration YAML (optionnelle)
+Ajoutez ce qui suit à votre `configuration.yaml` :
 
 ```yaml
-# configuration.yaml
 hairc:
   server: irc.example.com
-  port: 6667
-  nickname: homeassistant
-  channel: "#homeassistant"
-  password: !secret irc_password
-  ssl: false
+  port: 6697
+  nickname: votrebot
+  channel: "#votrecanal"
+  ssl: true
+  password: votremotdepasse  # Optionnel
+```
+
+## Utilisation
+
+### Envoi de messages
+
+Vous pouvez envoyer des messages à IRC en utilisant le service `hairc.send_message` :
+
+```yaml
+service: hairc.send_message
+data:
+  message: "Bonjour depuis Home Assistant !"
+  channel: "#votrecanal"  # Optionnel, utilise le canal par défaut si non spécifié
+```
+
+### Réception de messages
+
+Les messages IRC déclenchent l'événement `hairc_message`. Vous pouvez créer des automatisations basées sur ces événements :
+
+```yaml
+alias: "Réponse au ping IRC"
+trigger:
+  platform: event
+  event_type: hairc_message
+  event_data:
+    message: "ping"
+    type: public
+action:
+  service: hairc.send_message
+  data:
+    message: "pong"
+```
+
+### Message de bienvenue
+
+Pour faire envoyer un message de bienvenue par le bot lorsqu'il rejoint un canal, ajoutez cette automatisation :
+
+```yaml
+alias: "Message de bienvenue IRC"
+trigger:
+  platform: event
+  event_type: hairc_connected
+action:
+  service: hairc.send_message
+  data:
+    message: "Home Assistant à votre service. Tapez !help pour la liste des commandes"
 ```
 
 ## Dépannage
 
-Si vous rencontrez des problèmes de connexion :
+Si vous rencontrez des problèmes :
 
-1. Vérifiez que l'adresse du serveur est correcte
-2. Confirmez que le port est correct
-3. Vérifiez que le pseudonyme est disponible
-4. Vérifiez si le canal existe
-5. Recherchez les messages d'erreur dans le journal de Home Assistant
-
-## Contributions
-
-Les contributions sont les bienvenues ! Suivez ces étapes :
-
-1. Fork le projet
-2. Créez une nouvelle branche
-3. Effectuez vos modifications
-4. Envoyez une pull request
+1. Vérifiez les messages d'erreur dans les journaux de Home Assistant
+2. Vérifiez vos paramètres de serveur IRC
+3. Assurez-vous que votre pare-feu autorise les connexions sortantes vers le serveur IRC
+4. Vérifiez que le bot a la permission de rejoindre le canal
 
 ## Licence
 
-Ce projet est sous licence MIT - voir le fichier [LICENSE](LICENSE) pour plus de détails. 
+Ce projet est sous licence MIT - voir le fichier LICENSE pour plus de détails. 
