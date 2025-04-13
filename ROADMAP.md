@@ -15,6 +15,12 @@
 - Built-in help system
 - Status reporting features
 
+## v1.4.0 (Planned)
+- LLM integration for natural language interaction
+- "LLM mode" toggle for human-like conversations
+- Context-aware responses
+- Customizable personality settings
+
 ## Future Considerations
 - Support for multiple IRC servers
 - Advanced message filtering
