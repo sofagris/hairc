@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0] - 2025-05-15
+### Added
+- Structured message format with timestamp
+- Separate fields for nick and host in messages
+- Improved message display in Home Assistant
+
+## [1.0.0] - 2025-05-15
+### Added
+- Initial release
+- Basic IRC integration
+- Support for SSL connections
+- Auto-reconnect functionality
+- Message handling
+- Service for sending messages
+
 ## [0.1.5] - 2025-04-08
 
 ### Fixed

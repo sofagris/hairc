@@ -23,6 +23,59 @@
 - Improved connection stability
 - Fixed thread handling for reactor operations
 
+## Version 1.1.0
+
+### New Features
+- Structured message format with timestamp
+- Separate fields for nick and host in messages
+- Improved message display in Home Assistant
+
+### Example Usage
+```yaml
+type: vertical-stack
+cards:
+  - type: markdown
+    content: |
+      ![IRC Icon](/local/icons/icons8-chat.gif)  Messages:
+    card_mod:
+      style: |
+        ha-card {
+          background: rgba(0, 0, 0, 0.7) !important;
+          color: white !important;
+          box-shadow: none !important;
+          padding: 8px !important;
+        }
+  - type: custom:mushroom-template-card
+    primary: IRC Messages
+    secondary: "{{ states('sensor.irc') }}"
+    icon: mdi:chat
+    card_mod:
+      style: |
+        ha-card {
+          background: rgba(0, 0, 0, 0.7) !important;
+          color: white !important;
+          box-shadow: none !important;
+          padding: 8px !important;
+        }
+    template: |
+      {% set messages = state_attr('sensor.irc', 'messages') %}
+      {% if messages %}
+        {% for msg in messages %}
+          <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+            <div style="color: #888; font-size: 0.8em;">{{ msg.timestamp }}</div>
+            <div>
+              <strong style="color: #4CAF50;">{{ msg.nick }}</strong>
+              {% if msg.host %}
+                <span style="color: #888; font-size: 0.8em;">({{ msg.host }})</span>
+              {% endif %}
+            </div>
+            <div style="margin-left: 8px;">{{ msg.message }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        No messages yet
+      {% endif %}
+
 ## Version 0.1.5 (2025-04-08)
 
 ### Bug Fixes
