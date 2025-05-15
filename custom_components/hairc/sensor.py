@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Any
 import threading
+from datetime import datetime
 
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
@@ -68,6 +69,7 @@ class IRCClient(irc.IRCClient):
         self.connected = False
         self._config = config
         self.nickname = config["nick"]
+        self.realname = "Home Assistant IRC Bot"  # TODO: Make this configurable
         self.factory = None
         self._nick_attempts = 0
         self._reconnecting = False
@@ -160,7 +162,41 @@ class IRCClient(irc.IRCClient):
 
     def _add_message(self, message: str) -> None:
         """Add a message to the list, maintaining the maximum size."""
-        self.messages.append(message)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # Parse sender information if it exists in the message
+        if " from " in message:
+            # Extract the full sender info (e.g., "Sofagris!~roy@host")
+            sender_part = message.split(" from ")[1].split(":")[0]
+            message_content = (
+                message.split(": ", 1)[1] if ": " in message else message
+            )
+            
+            # Parse nick and host
+            if "!" in sender_part:
+                nick, host = sender_part.split("!", 1)
+                formatted_message = {
+                    "timestamp": timestamp,
+                    "nick": nick,
+                    "host": host,
+                    "message": message_content
+                }
+            else:
+                formatted_message = {
+                    "timestamp": timestamp,
+                    "nick": sender_part,
+                    "host": "",
+                    "message": message_content
+                }
+        else:
+            formatted_message = {
+                "timestamp": timestamp,
+                "nick": "System",
+                "host": "",
+                "message": message
+            }
+            
+        self.messages.append(formatted_message)
         if len(self.messages) > MAX_MESSAGES:
             self.messages = self.messages[-MAX_MESSAGES:]
 
