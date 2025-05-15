@@ -30,6 +30,30 @@
 - Separate fields for nick and host in messages
 - Improved message display in Home Assistant
 
+### Message Format
+The integration now provides two ways to access message information:
+
+1. Legacy format (maintained for compatibility):
+```yaml
+event_data:
+  message: "The message content"
+  sender: "Nick!user@host"
+  channel: "#channel"
+  type: "public"
+```
+
+2. New structured format:
+```yaml
+event_data:
+  message: "The message content"
+  sender: "Nick!user@host"  # Maintained for compatibility
+  nick: "Nick"
+  host: "user@host"
+  channel: "#channel"
+  type: "public"
+  timestamp: "HH:MM:SS"
+```
+
 ### Example Usage
 ```yaml
 type: vertical-stack
@@ -75,7 +99,7 @@ cards:
       {% else %}
         No messages yet
       {% endif %}
-
+```
 ## Version 0.1.5 (2025-04-08)
 
 ### Bug Fixes

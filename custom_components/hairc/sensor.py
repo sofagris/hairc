@@ -143,12 +143,19 @@ class IRCClient(irc.IRCClient):
                     self.msg(channel, "pong")
                 return
 
-            # Fire event for automations
+            # Parse nick and host from user
+            nick = user.split("!")[0] if "!" in user else user
+            host = user.split("!")[1] if "!" in user else ""
+
+            # Fire event for automations with structured data
             event_data = {
                 "message": message,
                 "sender": user,
+                "nick": nick,
+                "host": host,
                 "channel": channel,
-                "type": "private" if channel == self.nickname else "public"
+                "type": "private" if channel == self.nickname else "public",
+                "timestamp": datetime.now().strftime("%H:%M:%S")
             }
             self.hass.bus.fire(f"{DOMAIN}_message", event_data)
 
